@@ -331,7 +331,9 @@ function renderRest() {
     s("svg", { width: 132, height: 132, viewBox: "0 0 132 132" }, s("circle", { class: "ring-track", cx: 66, cy: 66, r: RING_R }), els.ringFill),
     h("div", { class: "ring-center" }, els.ringTime, h("div", { class: "ring-label" }, "Rest")));
   const kind = ex?.kind || x?.kind || "weight";
-  const nextText = st ? `Set ${r.s + 1} of ${x.sets.length}${(st.r || st.s) ? ` · ${setText(st, kind, timeUnit(ex))}` : ""}` : "";
+  // the next set as it stands: "60 kg × 8", or only "8 reps" while it has no weight yet (not "0 kg × 8")
+  const what = !st ? "" : kind === "weight" && !st.w ? (st.r ? plural(st.r, "rep") : "") : (st.r || st.s) ? setText(st, kind, timeUnit(ex)) : "";
+  const nextText = st ? `Set ${r.s + 1} of ${x.sets.length}${what ? ` · ${what}` : ""}` : "";
   els.dock.replaceChildren(h("div", { class: "rest" }, ring,
     h("div", { class: "rest-side" },
       h("div", { class: "rest-next" }, "Next", h("b", null, ex?.name || x?.name || ""), nextText),

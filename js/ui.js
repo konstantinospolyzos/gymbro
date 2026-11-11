@@ -165,11 +165,15 @@ export function stepper(value, { step = 1, min = 0, max = 9999, format = String,
 // ---------------------------------------------------------------------------
 // Layers: sheets, action sheets, alerts, toasts
 // ---------------------------------------------------------------------------
-const layer = () => document.getElementById("layer");
+const openLiveScreen = () => document.querySelector(".live:not(.hidden)");
+/** Where sheets, menus and alerts go: inside the open workout screen, so they share its stacking order
+ *  (on iPhone, Safari once drew the workout's panel over an alert's buttons), otherwise the app's layer */
+const host = () => openLiveScreen() || document.getElementById("layer");
 /** Over the workout screen (always dark), sheets and alerts are dark too */
 const overDark = () => (document.querySelector(".live:not(.hidden), .summary") ? "dark-scope" : "");
 let openSheets = 0;
-const lockScroll = (on) => document.documentElement.classList.toggle("locked", on);
+// the open workout screen keeps the page from scrolling too, so closing a sheet over it leaves that alone
+const lockScroll = (on) => document.documentElement.classList.toggle("locked", on || Boolean(openLiveScreen()));
 
 /** A full-height iOS sheet that slides up. left/right: {text, onClick, bold, disabled} */
 export function sheet({ title, left = null, right = null, body, onClose = null, className = "" }) {
@@ -208,7 +212,7 @@ export function sheet({ title, left = null, right = null, body, onClose = null, 
     rightBtn.addEventListener("click", () => right.onClick(api));
   }
   backdrop.addEventListener("click", () => (left?.onClick ? left.onClick(api) : api.close()));
-  layer().appendChild(wrap);
+  host().appendChild(wrap);
   openSheets += 1;
   lockScroll(true);
   requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add("open")));
@@ -224,11 +228,17 @@ export function actionSheet({ title = "", message = "", actions = [], cancel = "
     const list = h("div", { class: "as-group" });
     if (title || message) list.appendChild(h("div", { class: "as-head" }, title ? h("div", { class: "as-title" }, title) : null, message ? h("div", { class: "as-message" }, message) : null));
     const wrap = h("div", { class: `as-wrap ${overDark()}` });
+    const keys = new AbortController();
+    let done = false;
     const finish = (v) => {
+      if (done) return;
+      done = true;
+      keys.abort();
       wrap.classList.remove("open");
       setTimeout(() => wrap.remove(), 260);
       resolve(v);
     };
+    document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") finish(null); }, { signal: keys.signal });
     for (const a of actions) {
       list.appendChild(h("button", { type: "button", class: `as-btn ${a.style || ""}`, onclick: () => finish(a.value) },
         a.color ? dot(a.color, 10) : null,
@@ -237,13 +247,14 @@ export function actionSheet({ title = "", message = "", actions = [], cancel = "
     }
     const cancelBtn = h("button", { type: "button", class: "as-btn as-cancel", onclick: () => finish(null) }, cancel);
     wrap.append(h("div", { class: "as-backdrop", onclick: () => finish(null) }), h("div", { class: "as-panel", role: "dialog", "aria-label": title || "Choose" }, list, cancelBtn));
-    layer().appendChild(wrap);
+    host().appendChild(wrap);
     requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add("open")));
   });
 }
 
 /** iOS alert. buttons: [{text, value, style: "cancel" | "destructive" | "bold"}] -> Promise(value).
- *  input: {value, placeholder, mode} adds a text field; the promise then gives [value, text]. */
+ *  input: {value, placeholder, mode} adds a text field; the promise then gives [value, text].
+ *  A tap next to the alert (or Escape) is its Cancel button, so an alert can never trap you. */
 export function alertBox({ title, message = "", buttons = [{ text: "OK", value: true, style: "bold" }], input = null }) {
   return new Promise((resolve) => {
     const row = h("div", { class: `alert-buttons ${buttons.length > 2 ? "stacked" : ""}` });
@@ -254,14 +265,26 @@ export function alertBox({ title, message = "", buttons = [{ text: "OK", value: 
         h("div", { class: "alert-text" }, h("div", { class: "alert-title" }, title),
           message ? h("div", { class: "alert-message" }, message) : null, field),
         row));
+    // Cancel: the cancel button, else the one that says no, else a lone OK (an alert that only informs)
+    const cancel = buttons.find((b) => b.style === "cancel") || buttons.find((b) => b.value === false) || (buttons.length === 1 ? buttons[0] : null);
+    const keys = new AbortController();
+    let done = false;
     const finish = (value) => {
+      if (done) return;
+      done = true;
+      keys.abort();
       wrap.classList.remove("open");
       setTimeout(() => wrap.remove(), 200);
       resolve(input ? [value, field.value.trim()] : value);
     };
     for (const b of buttons) row.appendChild(h("button", { type: "button", class: `alert-btn ${b.style || ""}`, onclick: () => finish(b.value) }, b.text));
     field?.addEventListener("keydown", (ev) => { if (ev.key === "Enter") finish(buttons.find((b) => b.style === "bold")?.value ?? true); });
-    layer().appendChild(wrap);
+    if (cancel) {
+      // with a text field, a stray tap shouldn't throw the typing away (the keyboard's Done always works)
+      if (!input) wrap.addEventListener("click", (ev) => { if (ev.target === wrap) finish(cancel.value); });
+      document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") finish(cancel.value); }, { signal: keys.signal });
+    }
+    host().appendChild(wrap);
     requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add("open")));
     field?.focus();
   });
