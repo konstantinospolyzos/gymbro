@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Signing in…</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box;
+      font: 17px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; text-align: center;
+      background: #F2F2F7; color: #1C1C1E; }
+    @media (prefers-color-scheme: dark) { body { background: #000; color: #fff; } }
+    .sub { color: #8E8E93; font-size: 15px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div><div id="msg">Signing in to OneDrive…</div><div class="sub" id="sub"></div></div>
+  <script>
+    // Microsoft sends the sign-in back here with a one-time code. Hand it to the app and close.
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var res = { type: "gym-onedrive", code: q.get("code"), state: q.get("state"), error: q.get("error"),
+        error_description: q.get("error_description"), at: Date.now() };
+      var pk = null;
+      try { pk = JSON.parse(localStorage.getItem("gym.onedrivePkce") || "null"); } catch (e) { pk = null; }
+      try { localStorage.setItem("gym.onedriveResult", JSON.stringify(res)); } catch (e) { /* the app also gets a message */ }
+      try { var bc = new BroadcastChannel("gym-onedrive"); bc.postMessage(res); bc.close(); } catch (e) { /* old browser */ }
+      var opener = null;
+      try { opener = window.opener && window.opener !== window ? window.opener : null; } catch (e) { opener = null; }
+      if (opener) { try { opener.postMessage(res, location.origin); } catch (e) { /* the app reads it from storage */ } }
+      if (pk && pk.mode === "redirect") { location.replace("./"); return; }      // the whole app went to Microsoft
+      setTimeout(function () { try { window.close(); } catch (e) { /* not allowed */ } }, 250);
+      setTimeout(function () {
+        document.getElementById("msg").textContent = res.error ? "Sign-in didn't work." : "Signed in ✓";
+        document.getElementById("sub").textContent = "You can close this window and go back to the app.";
+      }, 1500);
+    })();
+  </script>
+</body>
+</html>
