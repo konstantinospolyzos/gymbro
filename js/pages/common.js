@@ -20,6 +20,9 @@ export function setsLine(data, entry) {
   return entry.sets.map((s) => setShort(s, entry.kind, unit)).join(" · ");
 }
 
+/** A note written on an exercise, as it shows in a summary and in History */
+export const noteText = (text) => h("div", { class: "note-text" }, icon("edit", 13), h("span", null, text));
+
 /** A logged workout as a card: name, day, time, volume, sets, records */
 export function sessionCard(data, session, onClick) {
   const st = sessionStats(session);

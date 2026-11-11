@@ -3,7 +3,7 @@
 
 import { exerciseMap, bySessionStart } from "./data.js";
 
-export const APP_VERSION = "1.1";
+export const APP_VERSION = "1.2";
 
 // ---------------------------------------------------------------------------
 // Dates (local time; a workout's "date" is the day it started)

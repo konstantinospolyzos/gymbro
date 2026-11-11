@@ -7,7 +7,7 @@ import { exerciseMap } from "../data.js";
 import { today, weekly, streak, monthTotals, muscleSplit, recentRecords, exerciseSummaries, exerciseSeries, exerciseHistory, bestsBefore,
   fmtNum, fmtVolume, fmtDuration, fmtAxisKg, kg, plural, relDay, shortDate, parseDay, fmtSecs, timeUnit, NBSP, MINUS, MONTHS, isoDay } from "../core.js";
 import { barChart, lineChart, sparkline, hbars } from "../charts.js";
-import { emptyState, setsLine } from "./common.js";
+import { emptyState, setsLine, noteText } from "./common.js";
 
 let weekMetric = 0;     // workouts, volume, time
 
@@ -159,16 +159,27 @@ export function openExerciseDetail(exId) {
     ? [["Best set (est. 1RM)", kg(best.e1rm)], ["Heaviest", kg(best.maxW)], ["Most volume", fmtVolume(best.volume)], ["Times done", String(hist.length)]]
     : kind === "reps" ? [["Most reps", plural(best.maxReps, "rep")], ["Most added", best.maxW ? `+${kg(best.maxW)}` : "–"], ["Times done", String(hist.length)], ["Last time", relDay(hist.at(-1).session.date)]]
       : [["Longest", fmtSecs(best.maxSecs, unit)], ["Times done", String(hist.length)]];
+  // the exercise's own notes: the same as on its card in every workout
+  const notes = h("textarea", { class: "note-input", rows: 2, maxlength: 500, placeholder: "Notes: seat height, grip, what to try next…", "aria-label": "Notes" });
+  notes.value = ex?.notes || "";
+  const saveNotes = () => {
+    const cur = exerciseMap(store.data).get(exId), t = notes.value.trim();
+    if (cur && t !== (cur.notes || "").trim()) store.setExerciseNotes(exId, t);
+  };
+  notes.addEventListener("change", saveNotes);
   const body = h("div", { class: "sheet-stack" },
     h("div", { class: "pr-cards" }, cards.map(([l, v]) => h("div", { class: "pr-card" }, h("div", { class: "caption" }, l), h("div", { class: "stat-value" }, v)))),
     h("div", { class: "card chart-card" },
       metrics.length > 1 ? segmented(metrics.map((x) => x[1]), mi, (i) => { mi = i; draw(); }, "full") : h("div", { class: "card-title" }, metrics[0][1]),
       chartSlot, explain),
+    ex ? h("div", { class: "section-caption" }, "Notes") : null,
+    ex ? h("div", { class: "card note-card" }, notes) : null,
     h("div", { class: "section-caption" }, "Every time"),
     h("div", { class: "group" }, [...hist].reverse().map((x) => h("div", { class: "info-row", style: { flexDirection: "column", gap: "3px" } },
       h("div", { style: { display: "flex", justifyContent: "space-between", gap: "10px" } }, h("b", { style: { fontWeight: "600" } }, shortDate(parseDay(x.session.date))),
         h("span", { class: "muted" }, x.session.name)),
-      h("div", { class: "num", style: { color: "var(--label2)", fontSize: "14px" } }, setsLine(data, x.entry))))));
-  sheet({ title: ex?.name || hist.at(-1).entry.name, right: { text: "Done", bold: true, onClick: (a) => a.close() }, body });
+      h("div", { class: "num", style: { color: "var(--label2)", fontSize: "14px" } }, setsLine(data, x.entry)),
+      x.entry.note ? noteText(x.entry.note) : null))));
+  sheet({ title: ex?.name || hist.at(-1).entry.name, right: { text: "Done", bold: true, onClick: (a) => a.close() }, body, onClose: saveNotes });
 }
 

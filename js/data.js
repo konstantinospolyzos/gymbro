@@ -177,8 +177,9 @@ function normSession(s) {
   const exercises = (Array.isArray(s.exercises) ? s.exercises : []).map((e) => {
     if (!e || !e.ex) return null;
     const sets = (Array.isArray(e.sets) ? e.sets : []).map(normSet).filter(Boolean);
+    const note = str(e.note, 500).trim();
     return sets.length ? { ex: String(e.ex), name: str(e.name, 80), kind: KINDS.includes(e.kind) ? e.kind : "weight",
-      muscle: MUSCLES.includes(e.muscle) ? e.muscle : "Other", sets } : null;
+      muscle: MUSCLES.includes(e.muscle) ? e.muscle : "Other", sets, ...(note ? { note } : {}) } : null;
   }).filter(Boolean);
   const startMs = start ?? new Date(`${date}T12:00:00`).getTime();
   const dur = int(s.dur, 0, 86400, 0);
@@ -240,6 +241,12 @@ export function applyOp(data, op) {
   const d = structuredClone(data);
   switch (op.type) {
     case "putExercise": { const e = normExercise(op.exercise); if (e) upsert(d.exercises, e); break; }
+    case "setExerciseNotes": {
+      const e = d.exercises.find((x) => x.id === op.id);
+      const notes = str(op.notes, 500).trim();
+      if (e) { if (notes) e.notes = notes; else delete e.notes; }
+      break;
+    }
     case "archiveExercise": {
       const e = d.exercises.find((x) => x.id === op.id);
       if (e) { if (op.archived === false) delete e.archived; else e.archived = true; }

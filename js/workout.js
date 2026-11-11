@@ -178,16 +178,52 @@ export function lastDoneAt(active) {
   return t || null;
 }
 
+// ---------------------------------------------------------------------------
+// Notes: each exercise has its own (seat height, grip, what to try next), shown and changed in every workout
+// ---------------------------------------------------------------------------
+/** The exercise's notes as they show in this workout: what you typed here, else the exercise's own */
+export function noteFor(active, data, e) {
+  const x = active.exercises[e];
+  if (!x) return "";
+  return x.note ?? exerciseMap(data).get(x.ex)?.notes ?? "";
+}
+
+/** Typing in an exercise's notes (note0 keeps what they said before, to know what changed today) */
+export function setNote(active, data, e, text) {
+  const x = active.exercises[e];
+  if (!x) return;
+  if (x.note === undefined) x.note0 = exerciseMap(data).get(x.ex)?.notes || "";
+  x.note = String(text).slice(0, 500);
+}
+
+const changedToday = (x) => x.note !== undefined && x.note.trim() !== (x.note0 || "").trim();
+
+/** True when a note was changed in this workout */
+export const notesChanged = (active) => active.exercises.some(changedToday);
+
+/** The notes typed in this workout that the exercises don't have yet: [{ ex, notes }] */
+export function notesToSave(active, data) {
+  const exMap = exerciseMap(data), out = new Map();
+  for (const x of active.exercises) {
+    if (x.note === undefined || !exMap.has(x.ex)) continue;
+    const t = x.note.trim();
+    if (t !== (exMap.get(x.ex).notes || "").trim()) out.set(x.ex, t);
+  }
+  return [...out].map(([ex, notes]) => ({ ex, notes }));
+}
+
 const cleanSet = (kind, { w, r, s }) => (kind === "time" ? { s: s ?? 0 } : kind === "reps" ? { w: w || null, r: r ?? 0 } : { w: w ?? 0, r: r ?? 0 });
 
-/** The finished workout as a logged session (only the sets that were done), or null if nothing was done */
+/** The finished workout as a logged session (only the sets that were done), or null if nothing was done.
+ *  A note written or changed today goes with it, so History shows what you noted that day. */
 export function toSession(active, data, end = Date.now()) {
   const exMap = exerciseMap(data);
   const exercises = active.exercises.map((x) => {
     const ex = exMap.get(x.ex);
     const kind = ex?.kind || x.kind;
     const sets = x.sets.filter((s) => s.done).map((s) => cleanSet(kind, s));
-    return sets.length ? { ex: x.ex, name: ex?.name || x.name, kind, muscle: ex?.muscle || "Other", sets } : null;
+    const note = changedToday(x) ? x.note.trim() : "";
+    return sets.length ? { ex: x.ex, name: ex?.name || x.name, kind, muscle: ex?.muscle || "Other", sets, ...(note ? { note } : {}) } : null;
   }).filter(Boolean);
   if (!exercises.length) return null;
   return {

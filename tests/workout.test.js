@@ -1,9 +1,9 @@
 // Checks for the workout in progress (js/workout.js): the next set, the rest, and what gets saved.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { emptyData, applyOp, sampleOp } from "../js/data.js";
+import { emptyData, applyOp, sampleOp, exerciseMap } from "../js/data.js";
 import { startActive, completeSet, current, nextAfter, tick, addRest, restLeft, toSession, addSet, removeSet, counts,
-  addExercise, prefill, skipRest, uncompleteSet } from "../js/workout.js";
+  addExercise, prefill, skipRest, uncompleteSet, noteFor, setNote, notesChanged, notesToSave } from "../js/workout.js";
 
 const plan = () => applyOp(emptyData(), sampleOp(emptyData()));
 const NOW = new Date("2026-11-09T18:00:00").getTime();
@@ -121,4 +121,49 @@ test("the top of the rep range in every set: next time the weight goes up", () =
   assert.deepEqual(a.exercises[0].sets.map((s) => [s.w, s.r]), [[65, 8], [65, 8], [65, 8]]);
   assert.equal(a.exercises[1].up, null);                                // one set short of 12: same weight
   assert.deepEqual(a.exercises[1].sets.map((s) => s.w), [50, 50, 50]);
+});
+
+test("notes: typed in a workout they go to the exercise, and the workout keeps what was written that day", () => {
+  let d = plan();
+  const back = d.workouts.find((w) => w.id === "rec-back");
+  const a = startActive(d, back, NOW);
+  const id = a.exercises[0].ex;
+  assert.equal(noteFor(a, d, 0), "");
+  assert.equal(notesChanged(a), false);
+  setNote(a, d, 0, "  Seat 4, thumbs over  ");
+  assert.equal(noteFor(a, d, 0), "  Seat 4, thumbs over  ");
+  assert.equal(notesChanged(a), true);
+  assert.deepEqual(notesToSave(a, d), [{ ex: id, notes: "Seat 4, thumbs over" }]);
+  for (const n of notesToSave(a, d)) d = applyOp(d, { type: "setExerciseNotes", id: n.ex, notes: n.notes });
+  assert.equal(exerciseMap(d).get(id).notes, "Seat 4, thumbs over");
+  assert.deepEqual(notesToSave(a, d), []);                       // saved: nothing more to do
+  completeSet(a, 0, 0, NOW + 60000);
+  completeSet(a, 1, 0, NOW + 200000);
+  const s = toSession(a, d, NOW + 3600000);
+  assert.equal(s.exercises[0].note, "Seat 4, thumbs over");
+  assert.equal("note" in s.exercises[1], false);                 // nothing written on that one
+  d = applyOp(d, { type: "putSession", session: s });
+  assert.equal(d.sessions.at(-1).exercises[0].note, "Seat 4, thumbs over");   // kept in the file
+
+  // next week the note is on the exercise; leaving it as it is adds nothing to that day
+  const T = NOW + 7 * 86400000;
+  const b = startActive(d, back, T);
+  assert.equal(noteFor(b, d, 0), "Seat 4, thumbs over");
+  completeSet(b, 0, 0, T + 60000);
+  assert.equal(notesChanged(b), false);
+  assert.equal("note" in toSession(b, d, T + 3600000).exercises[0], false);
+  // changed and changed back: nothing changed today
+  setNote(b, d, 0, "Seat 5");
+  setNote(b, d, 0, "Seat 4, thumbs over ");
+  assert.equal(notesChanged(b), false);
+  assert.deepEqual(notesToSave(b, d), []);
+  // emptied: the exercise loses its note
+  setNote(b, d, 0, "");
+  assert.deepEqual(notesToSave(b, d), [{ ex: id, notes: "" }]);
+  d = applyOp(d, { type: "setExerciseNotes", id, notes: "" });
+  assert.equal("notes" in exerciseMap(d).get(id), false);
+  // at most 500 characters; an exercise that isn't there changes nothing
+  d = applyOp(d, { type: "setExerciseNotes", id, notes: "x".repeat(600) });
+  assert.equal(exerciseMap(d).get(id).notes.length, 500);
+  assert.doesNotThrow(() => applyOp(d, { type: "setExerciseNotes", id: "ex-nope", notes: "hi" }));
 });

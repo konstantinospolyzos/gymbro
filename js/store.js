@@ -160,6 +160,7 @@ class Store {
 
   saveExercise(exercise) { this.commit({ type: "putExercise", exercise }); }
   archiveExercise(id, archived = true) { this.commit({ type: "archiveExercise", id, archived }); }
+  setExerciseNotes(id, notes) { this.commit({ type: "setExerciseNotes", id, notes }); }
   saveWorkout(workout) { this.commit({ type: "putWorkout", workout }); }
   deleteWorkout(id) { this.commit({ type: "deleteWorkout", id }); }
   moveWorkout(id, by) { this.commit({ type: "moveWorkout", id, by }); }

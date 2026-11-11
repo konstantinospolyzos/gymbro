@@ -678,6 +678,15 @@ button.meta-chip:active { opacity: 0.6; }
 .week-name { font-size: clamp(9px, 2.4vw, 10.5px); font-weight: 600; color: var(--label2); text-align: center; line-height: 1.15; word-break: keep-all; max-width: 100%; }
 .week-cell:not(.on) .week-name { color: var(--gray); font-weight: 500; }
 .rest-dot { background: var(--gray3); }
+.ex-note { display: block; width: 100%; min-height: 38px; margin: 10px 0 0; padding: 8px 11px; border: 0; border-radius: 10px;
+  background: var(--fill); color: var(--label); font-size: 16px; line-height: 1.35; resize: none; overflow: hidden; outline: none; }
+.ex-note::placeholder { color: var(--gray2); }
+.ex-note:not(:placeholder-shown) { background: var(--gold-bg); }
+.ex-note:focus { background: var(--fill); box-shadow: inset 0 0 0 2px var(--blue); }
+.note-text { display: flex; align-items: flex-start; gap: 6px; margin-top: 6px; padding: 6px 9px; border-radius: 8px;
+  background: var(--gold-bg); color: var(--label); font-size: 13.5px; line-height: 1.4; }
+.note-text .icon { margin-top: 2px; color: var(--gold-fg); }
+.note-text span { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ex-up { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 3px 8px; border-radius: 8px; font-size: 12.5px; font-weight: 700; color: var(--up-fg); background: var(--up-bg); }
 
 @media (min-width: 700px) {

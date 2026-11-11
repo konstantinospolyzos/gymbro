@@ -9,7 +9,7 @@ import { exerciseMap } from "../data.js";
 import { clock, fmtKg, kg, fmtRest, parseNum, parseSecs, setShort, setText, timeUnit, fmtSecs, relDay, timeOfDay, plural } from "../core.js";
 import { TIPS } from "../library.js";
 import { startActive, completeSet, uncompleteSet, current, addRest, skipRest, restLeft, tick, counts, toSession, addSet, removeSet,
-  addExercise, removeExercise, moveExercise, lastDoneAt } from "../workout.js";
+  addExercise, removeExercise, moveExercise, lastDoneAt, noteFor, setNote, notesChanged, notesToSave } from "../workout.js";
 import { unlock, scheduleCountdown, cancelCountdown, keepAwake, haptic, playFinish } from "../sound.js";
 import { NO, chooseRest } from "./common.js";
 import { openExercisePicker } from "./editors.js";
@@ -18,12 +18,15 @@ import { showSummary } from "./summary.js";
 let root = null, mini = null, timer = null;
 const els = {};
 let shownSecond = null;
+let listStale = false;          // the list waits while you type (rebuilding it would close the keyboard)
 const RING_R = 58, RING_C = 2 * Math.PI * RING_R;
+const TYPING = ".set-input, .ex-note";
 
 const A = () => store.active;
 const save = () => store.saveActive(A());
 const settings = () => store.data.settings;
 const isOpen = () => Boolean(root && !root.classList.contains("hidden"));
+const typingInList = () => Boolean(root && root.contains(document.activeElement) && document.activeElement.matches?.(TYPING));
 
 // ---------------------------------------------------------------------------
 // Starting, opening, closing
@@ -125,7 +128,7 @@ function loop() {
       save();
       shownSecond = null;
       if (isOpen()) {
-        render();
+        if (typingInList()) { listStale = true; renderDock(); } else render();
         if (now - until < 2500) { flash("Go!", "go"); haptic(); }
       }
     }
@@ -161,10 +164,13 @@ function build() {
       h("button", { type: "button", class: "live-finish", onclick: finish }, "Finish")),
     h("div", { class: "live-bar" }, els.barFill),
     els.list, els.dock, els.flash);
-  // typing a weight: the panel moves away so the keyboard has room
-  root.addEventListener("focusin", (ev) => { if (ev.target.matches?.(".set-input")) root.classList.add("typing"); });
+  // typing a weight or a note: the panel moves away so the keyboard has room
+  root.addEventListener("focusin", (ev) => { if (ev.target.matches?.(TYPING)) root.classList.add("typing"); });
   root.addEventListener("focusout", () => setTimeout(() => {
-    if (root && !document.activeElement?.matches?.(".set-input")) { root.classList.remove("typing"); renderDock(); }
+    if (root && !document.activeElement?.matches?.(TYPING)) {
+      root.classList.remove("typing");
+      if (listStale) render(); else renderDock();
+    }
   }, 80));
   // after the app was reopened, sounds need a tap again
   root.addEventListener("pointerdown", () => unlock(), { passive: true });
@@ -173,6 +179,8 @@ function build() {
 
 function render() {
   if (!root || !A()) return;
+  listStale = false;
+  saveNotes();              // a note typed just before a tap: its box is about to be rebuilt
   const a = A();
   root.style.setProperty("--wc", `var(--w-${a.color})`);
   els.name.replaceChildren(h("span", { class: `dot c-${a.color}` }), a.name);
@@ -235,12 +243,42 @@ function exerciseCard(x, e, cur) {
       h("div", { style: { flex: "1", minWidth: "0" } }, h("div", { class: "ex-title" }, ex?.name || x.name), h("div", { class: "ex-meta" }, meta),
         x.up ? h("div", { class: "ex-up" }, icon("arrowUp", 14), `+${kg(x.up.kg)} today: last time every set hit ${x.up.reps}`) : null),
       h("button", { type: "button", class: "icon-btn", "aria-label": `${ex?.name || "Exercise"}: more`, onclick: () => exerciseMenu(e) }, icon("more", 22))),
+    noteBox(x, e, ex),
     h("div", { class: "sets" }, setHead(kind, unit), rows),
     h("div", { class: "ex-actions" },
       h("button", { type: "button", class: "link-btn", onclick: () => { addSet(A(), e); save(); render(); } }, icon("plus", 16), "Add set"),
       x.sets.length > 1 && !x.sets.at(-1).done
         ? h("button", { type: "button", class: "link-btn", style: { color: "var(--gray)" }, onclick: () => { removeSet(A(), e, x.sets.length - 1); save(); render(); } }, icon("minus", 16), "Remove set")
         : null));
+}
+
+/** The exercise's notes: they stay with the exercise, so they're here every time you do it */
+function noteBox(x, e, ex) {
+  const box = h("textarea", { class: "ex-note", rows: 1, maxlength: 500, placeholder: "Notes: seat height, grip, next time…",
+    autocapitalize: "sentences", "aria-label": `Notes on ${ex?.name || x.name}` });
+  box.value = noteFor(A(), store.data, e);
+  box.addEventListener("input", () => {
+    const a = A(), i = a ? a.exercises.findIndex((b) => b.key === x.key) : -1;
+    if (i < 0) return;
+    setNote(a, store.data, i, box.value);
+    save();
+    fitNote(box);
+  });
+  box.addEventListener("change", saveNotes);
+  return box;
+}
+
+/** A notes box is as tall as its text */
+function fitNote(box) {
+  box.style.height = "auto";
+  box.style.height = `${box.scrollHeight}px`;
+}
+
+/** Notes typed in the workout go to the exercises, so they show next time (and in the exercise list) */
+function saveNotes() {
+  const a = A();
+  if (!a) return;
+  for (const n of notesToSave(a, store.data)) store.setExerciseNotes(n.ex, n.notes);
 }
 
 function renderList() {
@@ -254,6 +292,7 @@ function renderList() {
     h("div", { class: "live-add" }, h("button", { type: "button", class: "btn gray", onclick: addExercises }, icon("plus", 18), "Add exercise")),
     h("button", { type: "button", class: "live-discard", onclick: () => discard() }, "Discard workout"),
     h("div", { class: "spacer" }));
+  for (const box of els.list.querySelectorAll(".ex-note")) fitNote(box);
 }
 
 /** − value + with the value tappable to type it */
@@ -447,6 +486,7 @@ async function changeRest() {
 }
 
 async function exerciseMenu(e) {
+  saveNotes();
   const a = A(), x = a.exercises[e];
   const ex = exerciseMap(store.data).get(x.ex);
   const v = await actionSheet({
@@ -491,9 +531,12 @@ function addExercises() {
 
 async function discard(skipAsk = false) {
   if (!skipAsk) {
-    const ok = await alertBox({ title: "Discard this workout?", message: "Nothing from it is saved.", buttons: [NO, { text: "Discard", value: true, style: "destructive" }] });
+    const ok = await alertBox({ title: "Discard this workout?",
+      message: notesChanged(A()) ? "Its sets aren't saved. The notes you wrote stay with the exercises." : "Nothing from it is saved.",
+      buttons: [NO, { text: "Discard", value: true, style: "destructive" }] });
     if (!ok) return;
   }
+  saveNotes();
   store.saveActive(null);
   closeLive();
   store.emit();
@@ -520,6 +563,7 @@ async function finish() {
       buttons: [{ text: `At ${timeOfDay(at)}`, value: "then", style: "bold" }, { text: `Now (${timeOfDay(end)})`, value: "now" }] });
     if (v === "then") end = at;
   }
+  saveNotes();
   const session = toSession(a, store.data, end);
   store.saveSession(session);
   store.saveActive(null);

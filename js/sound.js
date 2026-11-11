@@ -111,6 +111,9 @@ let hapticLabel = null;
 export function haptic() {
   try {
     if (navigator.vibrate) { navigator.vibrate(15); return; }
+    // the switch trick can take the focus, which would close the keyboard while you type a weight or a note
+    const typing = document.activeElement;
+    if (typing && (typing.tagName === "TEXTAREA" || (typing.tagName === "INPUT" && typing.type !== "checkbox"))) return;
     if (!hapticLabel) {
       const input = document.createElement("input");
       input.type = "checkbox";

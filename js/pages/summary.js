@@ -6,7 +6,7 @@ import { store } from "../store.js";
 import { compareSession, clock, fmtDuration, fmtVolume, fmtNum, longDate, parseDay, timeOfDay, relDay, MINUS, NBSP,
   sessionStats, shortDate, fmtAxisKg } from "../core.js";
 import { barChart } from "../charts.js";
-import { setsLine } from "./common.js";
+import { setsLine, noteText } from "./common.js";
 
 const FEELS = [[1, "😮‍💨", "Hard"], [2, "🙂", "Good"], [3, "💪", "Great"]];
 
@@ -77,7 +77,8 @@ export function summaryContent(data, session, { fresh = false, onFeel = null, on
         x.records.length ? icon("trophy", 17, "text-gold") : null,
         chip(x.change.text, x.change.dir === "up" ? "up" : x.change.dir === "down" ? "down" : x.change.dir === "new" ? "new" : "flat")),
       h("div", { class: "sx-sets num" }, setsLine(data, x.entry)),
-      x.last ? h("div", { class: "sx-before num" }, `${relDay(x.last.session.date)}: ${setsLine(data, x.last.entry)}`) : null))));
+      x.last ? h("div", { class: "sx-before num" }, `${relDay(x.last.session.date)}: ${setsLine(data, x.last.entry)}`) : null,
+      x.entry.note ? noteText(x.entry.note) : null))));
 
   // this workout over time
   const same = data.sessions.filter((x) => x.start <= session.start && (session.workout ? x.workout === session.workout : x.name === session.name)).slice(-8);

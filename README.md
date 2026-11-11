@@ -9,6 +9,8 @@ Your gym week on your phone, in the same iOS look as the Savings Tracker and Glo
 - **Today:** today's workout, one tap to start
 - **The workout:** a clock for the whole workout, one big **Set done** button, then the rest counts down and beeps
   (and flashes) in its last 5 seconds so you're ready for the next set; weights start from last time
+- **Notes:** every exercise has its own notes (seat height, grip, what to try next), on its card in every workout;
+  the summary and History keep what you wrote on the day
 - **Summary:** total time, volume, and every exercise against the last time, with new personal records
 - **History:** a calendar and every workout; log one you did without the app
 - **Progress:** workouts a week and your streak, volume and time per week, sets per muscle group, records, and each

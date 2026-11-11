@@ -102,7 +102,7 @@ export function openExerciseEditor(exercise, { dark = false, name = "", onSaved 
       : ex.kind === "reps" ? "Log reps for each set, and extra kilos if you add a weight (a belt or a vest)."
         : "Log how long each set lasts: seconds (a plank), or minutes for cardio.";
   };
-  const notes = h("textarea", { class: "note-input", placeholder: "Notes: seat height, grip, cues…", rows: 2 });
+  const notes = h("textarea", { class: "note-input", placeholder: "Notes: seat height, grip, cues…", rows: 2, maxlength: 500 });
   notes.value = ex.notes || "";
   notes.addEventListener("input", () => { ex.notes = notes.value; });
   showKind();
@@ -114,7 +114,7 @@ export function openExerciseEditor(exercise, { dark = false, name = "", onSaved 
     kindHelp,
     caption("Weights"), group(stepRow), footer("How much the + and − buttons change the weight during a workout."),
     TIPS[ex.id] ? caption("How to do it") : null, TIPS[ex.id] ? h("div", { class: "group" }, h("div", { class: "info-text", style: { padding: "12px 16px" } }, TIPS[ex.id])) : null,
-    caption("Notes"), h("div", { class: "group" }, notes),
+    caption("Notes"), h("div", { class: "group" }, notes), footer("They're on this exercise in every workout, where you can change them too."),
     !isNew ? h("button", { type: "button", class: "btn destructive-row", onclick: async () => {
       const ok = await alertBox({ title: `Hide ${ex.name}?`, message: "It disappears from the lists. Workouts you've logged keep it, and you can show it again from the exercise list.",
         buttons: [NO, { text: "Hide", value: true, style: "destructive" }] });
