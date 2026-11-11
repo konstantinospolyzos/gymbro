@@ -5,7 +5,7 @@ import { h, icon, chip, toast } from "../ui.js";
 import { store } from "../store.js";
 import { exerciseMap } from "../data.js";
 import { longDate, today, isoDay, addDays, startOfWeek, WEEKDAYS, workoutForDay, expectedMinutes, workoutSets, lastFor, setShort, timeUnit,
-  plural, fmtRest, streak, repRange, sessionStats, fmtDuration, fmtVolume, timeOfDay, clock, recordCounts } from "../core.js";
+  plural, fmtRest, streak, repRange, sessionStats, fmtDuration, fmtVolume, timeOfDay, clock, recordCounts, supersets } from "../core.js";
 import { counts } from "../workout.js";
 import { workoutTile, sessionCard, chooseRest, chooseWorkout, emptyState } from "./common.js";
 import { startWorkout, openLive } from "./live.js";
@@ -15,13 +15,14 @@ import { openRecommended, openWeekRecommender } from "./recommend.js";
 
 function exerciseList(data, w) {
   const exMap = exerciseMap(data);
-  return h("div", { class: "hero-list" }, w.items.map((it) => {
+  const ss = supersets(w.items);
+  return h("div", { class: "hero-list" }, w.items.map((it, i) => {
     const ex = exMap.get(it.ex);
     const kind = ex?.kind || "weight";
     const last = lastFor(data, it.ex);
     const target = kind === "time" ? `${it.sets} × ${it.secs ? setShort({ s: it.secs }, "time", timeUnit(ex)) : "time"}` : `${it.sets} × ${repRange(it)}`;
-    return h("div", { class: "hero-ex" },
-      h("span", { class: "hero-ex-name" }, ex?.name || "Exercise"),
+    return h("div", { class: `hero-ex ${ss[i] ? "ss" : ""}` },
+      h("span", { class: "hero-ex-name" }, ss[i] ? h("span", { class: "ss-tag" }, `${ss[i].label}${ss[i].pos + 1} `) : null, ex?.name || "Exercise"),
       h("span", { class: "hero-ex-sets" }, target),
       h("span", { class: "hero-ex-last num", title: "Your best set last time" }, last?.stats.top ? setShort(last.stats.top, kind, timeUnit(ex)) : ""));
   }));

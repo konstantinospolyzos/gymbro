@@ -3,7 +3,11 @@
 // sleeps, the screen locks or the app is closed and opened again.
 
 import { uid, exerciseMap } from "./data.js";
-import { lastFor, isoDay } from "./core.js";
+import { lastFor, isoDay, warmupSets, barOf, supersets } from "./core.js";
+import { COMPOUND } from "./library.js";
+
+/** The rest after a warm-up set */
+export const WARMUP_REST = 60;
 
 /** What goes in a new set: the same set last time, else the plan's target */
 export function prefill(data, exId, i, item = null, before = Infinity) {
@@ -25,6 +29,7 @@ function exerciseBlock(data, exId, item, now) {
   return {
     key: uid("b"), ex: exId, kind: ex?.kind || "weight", name: ex?.name || "Exercise",
     rest: item?.rest ?? null,
+    ...(item?.group ? { group: item.group } : {}),
     target: item ? { sets: item.sets, reps: item.reps, hi: item.hi ?? null, w: item.w, secs: item.secs } : null,
     up: up ? { kg: up, reps: item.hi } : null,
     prev: last ? last.entry.sets.map((s) => ({ ...s })) : [],
@@ -37,15 +42,111 @@ function exerciseBlock(data, exId, item, now) {
   };
 }
 
-/** A new workout from the plan (or an empty one when workout is null) */
+/** A new workout from the plan (or an empty one when workout is null). The first heavy lift gets warm-up sets. */
 export function startActive(data, workout, now = Date.now(), { rest } = {}) {
-  return {
+  const a = {
     id: uid("s"), workout: workout?.id ?? null, name: workout?.name || "Workout", color: workout?.color || "blue",
     rest: workout ? workout.rest : rest ?? data.settings.rest,
     start: now, date: isoDay(new Date(now)),
     exercises: workout ? workout.items.filter((it) => exerciseMap(data).has(it.ex)).map((it) => exerciseBlock(data, it.ex, it, now)) : [],
     resting: null, focus: null, version: 1,
   };
+  if (data.settings.warmup !== false) {
+    const e = a.exercises.findIndex((x) => COMPOUND.has(x.ex));
+    if (e >= 0) addWarmups(a, data, e);
+  }
+  return a;
+}
+
+// ---------------------------------------------------------------------------
+// Warm-up sets: first in an exercise, lighter, not saved with the workout
+// ---------------------------------------------------------------------------
+export const warmCount = (x) => x.sets.filter((st) => st.warm).length;
+
+/** A set's number among the working sets (0 for the first), or null for a warm-up */
+export const workIndex = (x, s) => (x.sets[s]?.warm ? null : s - x.sets.slice(0, s).filter((st) => st.warm).length);
+
+/** Warm-up sets before an exercise's sets, from the weight of its first set. Returns how many. */
+export function addWarmups(active, data, e) {
+  const x = active.exercises[e];
+  if (!x || x.sets.some((st) => st.warm)) return 0;
+  const ex = exerciseMap(data).get(x.ex);
+  if ((ex?.kind || x.kind) !== "weight") return 0;
+  const list = warmupSets(x.sets.find((st) => !st.done)?.w, { step: ex?.step || 2.5, bar: barOf(ex) });
+  if (!list.length) return 0;
+  x.sets.unshift(...list.map(({ w, r }) => ({ w, r, s: null, orig: { w, r, s: null }, done: false, at: null, warm: true })));
+  // the rest and a tapped set point at sets by number: they move down with them
+  if (active.resting?.e === e) active.resting = { ...active.resting, s: active.resting.s + list.length };
+  if (active.focus?.e === e) active.focus = { ...active.focus, s: active.focus.s + list.length };
+  return list.length;
+}
+
+/** Take away the warm-up sets not done yet */
+export function removeWarmups(active, e) {
+  const x = active.exercises[e];
+  if (!x) return;
+  const gone = x.sets.map((st, i) => (st.warm && !st.done ? i : -1)).filter((i) => i >= 0);
+  if (!gone.length) return;
+  const moved = (s) => s - gone.filter((i) => i < s).length;
+  const pointsAtGone = (p) => p && p.e === e && gone.includes(p.s);
+  x.sets = x.sets.filter((st) => !(st.warm && !st.done));
+  if (active.focus?.e === e) active.focus = pointsAtGone(active.focus) ? null : { ...active.focus, s: moved(active.focus.s) };
+  if (active.resting?.e === e) {
+    if (pointsAtGone(active.resting)) { const n = firstUndone(active); active.resting = n ? { ...active.resting, ...n } : null; }
+    else active.resting = { ...active.resting, s: moved(active.resting.s) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Swapping an exercise (the machine is taken)
+// ---------------------------------------------------------------------------
+/** Another exercise instead: the sets still to do go to it (with its own weights from last time), the ones
+ *  done stay where they are. Rest, reps and superset carry over. Returns the new exercise's place. */
+export function swapExercise(active, data, e, exId, now = Date.now()) {
+  const x = active.exercises[e];
+  if (!x) return -1;
+  const ex = exerciseMap(data).get(exId);
+  const kind = ex?.kind || "weight";
+  const work = x.sets.filter((st) => !st.warm);
+  const t = x.target || {};
+  const item = { sets: Math.max(1, work.filter((st) => !st.done).length), reps: kind === "time" ? null : t.reps ?? 10,
+    hi: kind === "time" ? null : t.hi ?? null, w: null, secs: kind === "time" ? (ex?.muscle === "Cardio" ? 1200 : 60) : null,
+    rest: x.rest ?? null, group: x.group ?? null };
+  const block = exerciseBlock(data, exId, item, now);
+  const keep = x.sets.some((st) => st.done);
+  if (keep) {
+    x.sets = x.sets.filter((st) => st.done);
+    delete x.group;
+    active.exercises.splice(e + 1, 0, block);
+  } else active.exercises[e] = block;
+  const at = keep ? e + 1 : e;
+  active.focus = null;
+  if (active.resting) {
+    const r = active.resting;
+    if (r.e === e) active.resting = { ...r, e: at, s: 0 };
+    else if (keep && r.e > e) active.resting = { ...r, e: r.e + 1 };
+  }
+  return at;
+}
+
+// ---------------------------------------------------------------------------
+// Supersets in a workout
+// ---------------------------------------------------------------------------
+/** The order the sets are done in: an exercise's sets one after the other; in a superset, after any warm-ups,
+ *  one set of each exercise in turn (A1 B1, A2 B2, …) */
+export function sequence(active) {
+  const list = active.exercises, ss = supersets(list), out = [];
+  for (let e = 0; e < list.length; e++) {
+    const g = ss[e];
+    if (!g) { list[e].sets.forEach((_, s) => out.push({ e, s })); continue; }
+    if (g.pos) continue;
+    const members = Array.from({ length: g.size }, (_, k) => g.start + k);
+    for (const m of members) list[m].sets.forEach((st, s) => { if (st.warm) out.push({ e: m, s }); });
+    const work = members.map((m) => list[m].sets.map((st, s) => (st.warm ? -1 : s)).filter((s) => s >= 0));
+    const rounds = Math.max(...work.map((w) => w.length));
+    for (let r = 0; r < rounds; r++) members.forEach((m, k) => { if (work[k][r] !== undefined) out.push({ e: m, s: work[k][r] }); });
+  }
+  return out;
 }
 
 export function addExercise(active, data, exId, now = Date.now()) {
@@ -87,21 +188,24 @@ export function removeSet(active, e, s) {
   }
 }
 
+/** After the order changed (a superset made or undone): the rest counts down to the set that's now next */
+export function retargetRest(active) {
+  if (!active.resting) return;
+  const n = firstUndone(active);
+  active.resting = n ? { ...active.resting, ...n } : null;
+}
+
 function firstUndone(active) {
-  for (let e = 0; e < active.exercises.length; e++) {
-    const s = active.exercises[e].sets.findIndex((x) => !x.done);
-    if (s >= 0) return { e, s };
-  }
+  for (const p of sequence(active)) if (!active.exercises[p.e].sets[p.s].done) return p;
   return null;
 }
 
-/** The next set to do after (e, s): the rest of this exercise first, then the following ones, then anything skipped */
+/** The next set to do after (e, s): the rest of this exercise first (in a superset: the next exercise's set),
+ *  then the following ones, then anything skipped */
 export function nextAfter(active, e, s) {
-  const list = active.exercises;
-  for (let i = e; i < list.length; i++) {
-    const from = i === e ? s + 1 : 0;
-    for (let j = from; j < list[i].sets.length; j++) if (!list[i].sets[j].done) return { e: i, s: j };
-  }
+  const seq = sequence(active), list = active.exercises;
+  const i = seq.findIndex((p) => p.e === e && p.s === s);
+  for (let k = i + 1; k < seq.length; k++) if (!list[seq[k].e].sets[seq[k].s].done) return seq[k];
   return firstUndone(active);
 }
 
@@ -128,8 +232,9 @@ export function completeSet(active, e, s, now = Date.now()) {
   // The sets after it follow: empty values start from this set, and a weight (or time) you changed carries on to
   // the sets that had the same one and that you haven't touched (straight sets; a pyramid keeps its own).
   const val = (x, k) => x?.[k] ?? null;
-  for (const later of active.exercises[e].sets.slice(s + 1)) {
-    if (later.done) continue;
+  // (a warm-up set changes nothing after it)
+  for (const later of set.warm ? [] : active.exercises[e].sets.slice(s + 1)) {
+    if (later.done || later.warm) continue;
     for (const k of ["w", "r", "s"]) {
       if (val(later, k) === null && val(set, k) !== null) later[k] = set[k];
       else if (k !== "r" && set.orig && later.orig && val(later, k) === val(later.orig, k) && val(later.orig, k) === val(set.orig, k)) later[k] = set[k];
@@ -137,9 +242,22 @@ export function completeSet(active, e, s, now = Date.now()) {
     }
   }
   const next = nextAfter(active, e, s);
-  const rest = next ? restFor(active, e) : 0;
+  const rest = next ? restAfter(active, e, s, next) : 0;
   active.resting = next && rest > 0 ? { until: now + rest * 1000, total: rest, e: next.e, s: next.s, from: now } : null;
   return active.resting ? rest : 0;
+}
+
+/** The rest after a set: short after a warm-up; none between the exercises of a superset (only after each
+ *  round, the longest rest of its exercises); else the exercise's own rest, or the workout's */
+function restAfter(active, e, s, next) {
+  const list = active.exercises;
+  if (list[e].sets[s].warm) return WARMUP_REST;
+  const g = supersets(list)[e];
+  if (!g) return restFor(active, e);
+  const inRound = next.e > e && next.e <= g.end && !list[next.e].sets[next.s].warm
+    && workIndex(list[next.e], next.s) === workIndex(list[e], s);
+  if (inRound) return 0;
+  return Math.max(...Array.from({ length: g.size }, (_, k) => restFor(active, g.start + k)));
 }
 
 export function uncompleteSet(active, e, s) {
@@ -166,9 +284,10 @@ export function tick(active, now = Date.now()) {
   return false;
 }
 
+/** Sets done and to do (warm-ups don't count) */
 export function counts(active) {
   let done = 0, total = 0;
-  for (const x of active.exercises) for (const s of x.sets) { total += 1; if (s.done) done += 1; }
+  for (const x of active.exercises) for (const s of x.sets) { if (s.warm) continue; total += 1; if (s.done) done += 1; }
   return { done, total };
 }
 
@@ -221,7 +340,7 @@ export function toSession(active, data, end = Date.now()) {
   const exercises = active.exercises.map((x) => {
     const ex = exMap.get(x.ex);
     const kind = ex?.kind || x.kind;
-    const sets = x.sets.filter((s) => s.done).map((s) => cleanSet(kind, s));
+    const sets = x.sets.filter((s) => s.done && !s.warm).map((s) => cleanSet(kind, s));
     const note = changedToday(x) ? x.note.trim() : "";
     return sets.length ? { ex: x.ex, name: ex?.name || x.name, kind, muscle: ex?.muscle || "Other", sets, ...(note ? { note } : {}) } : null;
   }).filter(Boolean);

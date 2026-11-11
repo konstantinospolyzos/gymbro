@@ -1,13 +1,15 @@
-// Progress: how often you train (and your streak), how much you lift week by week, which muscles got
-// the work, your newest personal records, and every exercise's best set over time.
+// Progress: how often you train (and your streak), how much you lift week by week, your body weight, the
+// sets each muscle got this week, your newest personal records, lifts that stopped going up, and every
+// exercise's best set over time.
 
-import { h, icon, sheet, segmented, chip } from "../ui.js";
+import { h, icon, sheet, segmented, chip, group, actionRow } from "../ui.js";
 import { store } from "../store.js";
 import { exerciseMap } from "../data.js";
-import { today, weekly, streak, monthTotals, muscleSplit, recentRecords, exerciseSummaries, exerciseSeries, exerciseHistory, bestsBefore,
+import { today, weekly, streak, monthTotals, weekMuscles, plateaus, alternatives, recentRecords, exerciseSummaries, exerciseSeries, exerciseHistory, bestsBefore,
   fmtNum, fmtVolume, fmtDuration, fmtAxisKg, kg, plural, relDay, shortDate, parseDay, fmtSecs, timeUnit, NBSP, MINUS, MONTHS, isoDay } from "../core.js";
-import { barChart, lineChart, sparkline, hbars } from "../charts.js";
+import { barChart, lineChart, sparkline } from "../charts.js";
 import { emptyState, setsLine, noteText } from "./common.js";
+import { bodyCard } from "./body.js";
 
 let weekMetric = 0;     // workouts, volume, time
 
@@ -42,7 +44,8 @@ export function renderProgress() {
   const data = store.data;
   if (!data.sessions.length) {
     return ["Your progress, week by week",
-      emptyState("progress", "Nothing to show yet", "After your first workout you'll see how often you train, how much you lift and your records here.")];
+      emptyState("progress", "Nothing to show yet", "After your first workout you'll see how often you train, how much you lift and your records here."),
+      bodyCard(data)];
   }
   const now = today();
   const st = streak(data, now);
@@ -89,13 +92,7 @@ export function renderProgress() {
     h("div", { class: "chart-top" }, bigSlot, segmented(metrics.map((x) => x.name), weekMetric, (i) => { weekMetric = i; drawWeeks(); }, "small")),
     chartSlot);
 
-  const parts = ["Your progress, week by week", tiles, weekCard];
-
-  // muscles
-  const split = muscleSplit(data, 30, now);
-  if (split.length) parts.push(h("div", { class: "card" },
-    h("div", { class: "card-head" }, h("div", { class: "card-title" }, "Sets per muscle group"), h("span", { class: "muted" }, "last 30 days")),
-    hbars(split.map((x) => ({ label: x.muscle, value: x.sets, text: String(x.sets) })))));
+  const parts = ["Your progress, week by week", tiles, weekCard, muscleWeekCard(data, now), bodyCard(data)];
 
   // records
   const recs = recentRecords(data, 5);
@@ -105,6 +102,15 @@ export function renderProgress() {
       h("span", { class: "pr-text" }, h("div", { class: "pr-title" }, exerciseMap(data).get(r.entry.ex)?.name || r.entry.name),
         h("div", { class: "pr-sub" }, `${r.record.label} · ${relDay(r.session.date)}`)),
       h("span", { class: "pr-value" }, r.record.value)))));
+
+  // lifts that stopped going up
+  const stuck = plateaus(data, now);
+  if (stuck.length) parts.push(h("div", { class: "section-caption" }, "Stopped going up"),
+    h("div", { class: "group" }, stuck.map((x) => h("button", { type: "button", class: "ex-row", onclick: () => openPlateau(x) },
+      h("span", { class: "ex-text" }, h("span", { class: "ex-name" }, x.name),
+        h("span", { class: "ex-sub" }, `Best ${bestText(x)} on ${shortDate(parseDay(x.best.session.date))} · ${plural(x.since, "time")} since`)),
+      h("span", { class: "ex-right" }, chip(`${x.weeks} weeks`, "warn", "small")),
+      icon("chevron", 15, "chev")))));
 
   // every exercise
   const sums = exerciseSummaries(data, now);
@@ -119,6 +125,63 @@ export function renderProgress() {
         icon("chevron", 15, "chev"));
     })));
   return parts;
+}
+
+// ---------------------------------------------------------------------------
+// Sets per muscle this week
+// ---------------------------------------------------------------------------
+/** Hard sets per muscle this week (and what the plan has) against 10–20, the range the research finds builds muscle */
+function muscleWeekCard(data, now) {
+  const rows = weekMuscles(data, now);
+  if (!rows.some((r) => r.done || r.planned)) return null;
+  const max = Math.max(24, ...rows.map((r) => Math.max(r.done, r.planned)));
+  const at = (v) => `${(Math.min(v, max) / max) * 100}%`;
+  const n = (v) => fmtNum(v, v % 1 ? 1 : 0);
+  const hasPlan = rows.some((r) => r.planned);
+  const low = hasPlan ? rows.filter((r) => r.planned < 10).map((r) => r.muscle) : [];
+  return h("div", { class: "card" },
+    h("div", { class: "card-head" }, h("div", { class: "card-title" }, "Sets per muscle this week"), h("span", { class: "muted" }, "Mon–Sun")),
+    h("div", { class: "mv-rows", role: "list" }, rows.map((r) => h("div", { class: "mv-row", role: "listitem",
+      "aria-label": `${r.muscle}: ${n(r.done)} sets done${hasPlan ? `, ${n(r.planned)} in your plan` : ""}` },
+      h("span", { class: "mv-label" }, r.muscle),
+      h("span", { class: "mv-track" },
+        h("span", { class: "mv-band", style: { left: at(10), width: `calc(${at(20)} - ${at(10)})` } }),
+        r.done ? h("span", { class: "mv-fill", style: { width: at(r.done) } }) : null,
+        hasPlan && r.planned ? h("span", { class: "mv-plan", style: { left: at(r.planned) } }) : null),
+      h("span", { class: "mv-value num" }, h("b", null, n(r.done)), hasPlan ? h("span", { class: "muted" }, ` / ${n(r.planned)}`) : null)))),
+    h("div", { class: "chart-legend", style: { marginTop: "10px" } },
+      h("span", { class: "legend-key" }, h("span", { class: "key-swatch" }), "Done"),
+      hasPlan ? h("span", { class: "legend-key" }, h("span", { class: "key-tick" }), "Your plan") : null,
+      h("span", { class: "legend-key" }, h("span", { class: "key-band" }), "10–20 a week builds muscle")),
+    h("div", { class: "mv-note" }, low.length ? `Under 10 a week in your plan: ${low.join(", ")}. ` : "",
+      "A press also counts half a set for the triceps and shoulders, a row half for the biceps."));
+}
+
+// ---------------------------------------------------------------------------
+// A lift that stopped going up
+// ---------------------------------------------------------------------------
+function bestText(x) {
+  const top = x.best.stats.top;
+  if (!top) return "";
+  return x.kind === "weight" ? `${kg(top.w || 0)} × ${top.r || 0}` : top.w ? `${top.r} reps +${kg(top.w)}` : `${top.r} reps`;
+}
+
+function openPlateau(x) {
+  const alts = alternatives(store.data, x.id).similar.slice(0, 3).map((e) => e.name);
+  const tips = [
+    ["A lighter week", "About 10 % less weight for a week, then build up again: tiredness can hide strength you already have."],
+    ["A new rep range", "For 4–6 weeks aim for another range, like 6–8 if you've been doing 8–12, or the other way round."],
+    ["One more set", "If the muscle gets fewer than 10 hard sets a week (Sets per muscle shows it), add a set or two."],
+    ["A close variation", alts.length ? `Do ${alts.join(", ")} for 4–6 weeks instead (Swap, in the workout's ⋯ menu).` : "Swap it for a similar exercise for 4–6 weeks."],
+    ["Recovery", "Sleep, enough food, and protein: about 1.6 g per kg of body weight a day. Muscles get stronger between workouts."],
+  ];
+  let api = null;
+  const body = h("div", { class: "form" },
+    h("div", { class: "info-text", style: { padding: "8px 4px 0" } },
+      h("p", null, `Your best was ${bestText(x)} on ${shortDate(parseDay(x.best.session.date))}, and the ${plural(x.since, "time")} since didn't beat it. It happens to everyone. What usually gets it moving again:`)),
+    h("div", { class: "group" }, tips.map(([t, d]) => h("div", { class: "tip-row" }, h("b", null, t), h("span", null, d)))),
+    group(actionRow("progress", "See its progress", () => { api.close(); openExerciseDetail(x.id); })));
+  api = sheet({ title: x.name, right: { text: "Done", bold: true, onClick: (a) => a.close() }, body });
 }
 
 // ---------------------------------------------------------------------------

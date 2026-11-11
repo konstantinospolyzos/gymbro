@@ -3,15 +3,17 @@
 // seconds so you're ready for the next set. Pull it down to look at the rest of the app; the workout
 // keeps running in the bar above the tabs.
 
-import { h, s, icon, alertBox, actionSheet, toast, askText, selectOnFocus, darkStatusBar } from "../ui.js";
+import { h, s, icon, alertBox, actionSheet, toast, askText, selectOnFocus, darkStatusBar, sheet, group, caption, actionRow } from "../ui.js";
 import { store } from "../store.js";
 import { exerciseMap } from "../data.js";
-import { clock, fmtKg, kg, fmtRest, parseNum, parseSecs, setShort, setText, timeUnit, fmtSecs, relDay, timeOfDay, plural } from "../core.js";
-import { TIPS } from "../library.js";
+import { clock, fmtKg, kg, fmtRest, parseNum, parseSecs, setShort, setText, timeUnit, fmtSecs, relDay, timeOfDay, plural,
+  supersets, linkNext, unlink, alternatives, barOf, platesText, lastFor } from "../core.js";
+import { TIPS, videoUrl } from "../library.js";
 import { startActive, completeSet, uncompleteSet, current, addRest, skipRest, restLeft, tick, counts, toSession, addSet, removeSet,
-  addExercise, removeExercise, moveExercise, lastDoneAt, noteFor, setNote, notesChanged, notesToSave } from "../workout.js";
+  addExercise, removeExercise, moveExercise, lastDoneAt, noteFor, setNote, notesChanged, notesToSave,
+  addWarmups, removeWarmups, warmCount, workIndex, swapExercise, retargetRest } from "../workout.js";
 import { unlock, scheduleCountdown, cancelCountdown, keepAwake, haptic, playFinish } from "../sound.js";
-import { NO, chooseRest } from "./common.js";
+import { NO, chooseRest, setsLine } from "./common.js";
 import { openExercisePicker } from "./editors.js";
 import { showSummary } from "./summary.js";
 
@@ -27,6 +29,20 @@ const save = () => store.saveActive(A());
 const settings = () => store.data.settings;
 const isOpen = () => Boolean(root && !root.classList.contains("hidden"));
 const typingInList = () => Boolean(root && root.contains(document.activeElement) && document.activeElement.matches?.(TYPING));
+
+/** "Warm-up 1 of 2" or "Set 2 of 3" (warm-ups don't count as sets) */
+function setName(x, s) {
+  const wi = workIndex(x, s);
+  return wi === null ? `Warm-up ${s + 1} of ${warmCount(x)}` : `Set ${wi + 1} of ${x.sets.length - warmCount(x)}`;
+}
+
+/** For a barbell lift with a weight: "Each side: 20 + 10 + 2.5" */
+function platesLine(ex, w) {
+  const bar = barOf(ex);
+  return bar && w ? platesText(w, bar, settings().plates) : "";
+}
+
+const openVideo = (name) => window.open(videoUrl(name), "_blank", "noopener");
 
 // ---------------------------------------------------------------------------
 // Starting, opening, closing
@@ -102,7 +118,8 @@ function updateMini(now) {
   const a = A();
   const left = restLeft(a, now);
   const cur = current(a);
-  const sub = a.resting ? "Resting" : cur ? `${a.exercises[cur.e] ? exerciseMap(store.data).get(a.exercises[cur.e].ex)?.name || "" : ""} · set ${cur.s + 1}` : "All sets done";
+  const cx = cur ? a.exercises[cur.e] : null;
+  const sub = a.resting ? "Resting" : cx ? `${exerciseMap(store.data).get(cx.ex)?.name || cx.name} · ${setName(cx, cur.s).toLowerCase()}` : "All sets done";
   mini.classList.toggle("warn", Boolean(a.resting) && left <= settings().countdown * 1000);
   mini.replaceChildren(
     h("span", { class: `dot c-${a.color}`, style: { width: "10px", height: "10px" } }),
@@ -210,7 +227,7 @@ function input(e, i, key, value, { placeholder = "", mode = "decimal", label = "
   return el;
 }
 
-function exerciseCard(x, e, cur) {
+function exerciseCard(x, e, cur, ss) {
   const ex = exerciseMap(store.data).get(x.ex);
   const kind = ex?.kind || x.kind, unit = timeUnit(ex);
   const allDone = x.sets.length > 0 && x.sets.every((st) => st.done);
@@ -219,11 +236,13 @@ function exerciseCard(x, e, cur) {
     x.prevDate ? `Last: ${relDay(x.prevDate)}` : "First time"].filter(Boolean).join(" · ");
   const rows = x.sets.map((st, i) => {
     const isCur = cur && cur.e === e && cur.s === i;
-    const prev = x.prev[i] || null;
+    const wi = workIndex(x, i);
+    const prev = wi === null ? null : x.prev[wi] || null;
     const t = x.target || {};
-    const row = h("div", { class: `set-row ${kind === "time" ? "time" : ""} ${st.done ? "done" : ""} ${isCur ? "current" : ""}` },
-      h("button", { type: "button", class: "set-num", "aria-label": `Do set ${i + 1} next`, onclick: () => focusSet(e, i) }, String(i + 1)),
-      h("button", { type: "button", class: "set-prev", "aria-label": "Use last time's", onclick: () => copyPrev(e, i) }, prev ? setShort(prev, kind, unit) : "—"));
+    const label = wi === null ? "warm-up set" : `set ${wi + 1}`;
+    const row = h("div", { class: `set-row ${kind === "time" ? "time" : ""} ${st.done ? "done" : ""} ${isCur ? "current" : ""} ${st.warm ? "warm" : ""}` },
+      h("button", { type: "button", class: "set-num", "aria-label": `Do ${label} next`, onclick: () => focusSet(e, i) }, wi === null ? "W" : String(wi + 1)),
+      h("button", { type: "button", class: "set-prev", "aria-label": "Use last time's", onclick: () => copyPrev(e, i) }, prev ? setShort(prev, kind, unit) : wi === null ? "warm-up" : "—"));
     if (kind === "time") {
       const v = st.s === null || st.s === undefined ? "" : unit === "min" ? String(Math.round((st.s / 60) * 10) / 10) : String(st.s);
       const inp = input(e, i, "s", v, { placeholder: t.secs ? (unit === "min" ? String(t.secs / 60) : String(t.secs)) : unit, mode: unit === "min" ? "decimal" : "numeric", label: unit === "min" ? "Minutes" : "Seconds" });
@@ -234,11 +253,13 @@ function exerciseCard(x, e, cur) {
         input(e, i, "w", st.w === null || st.w === undefined ? "" : fmtKg(st.w).replace(/ /g, ""), { placeholder: kind === "reps" ? "+0" : t.w ? fmtKg(t.w) : "kg", label: kind === "reps" ? "Added kilos" : "Kilos" }),
         input(e, i, "r", st.r === null || st.r === undefined ? "" : String(st.r), { placeholder: t.reps ? String(t.reps) : "reps", mode: "numeric", label: "Reps" }));
     }
-    row.appendChild(h("button", { type: "button", class: "set-check", "aria-label": st.done ? `Set ${i + 1} done. Tap to undo` : `Set ${i + 1}: done`, onclick: () => toggleDone(e, i) },
+    row.appendChild(h("button", { type: "button", class: "set-check", "aria-label": st.done ? `${label} done. Tap to undo` : `${label}: done`, onclick: () => toggleDone(e, i) },
       icon(st.done ? "checkBold" : "check", 20)));
     return row;
   });
-  return h("div", { class: `ex-card ${cur && cur.e === e ? "current" : ""} ${allDone ? "finished" : ""}`, dataset: { e } },
+  const ssPos = ss ? (ss.pos === 0 ? "first" : ss.pos === ss.size - 1 ? "last" : "middle") : "";
+  return h("div", { class: `ex-card ${cur && cur.e === e ? "current" : ""} ${allDone ? "finished" : ""} ${ss ? `ss ss-${ssPos}` : ""}`, dataset: { e } },
+    ss ? h("div", { class: "ss-label" }, icon("link", 14), `Superset ${ss.label} · ${ss.pos + 1} of ${ss.size}`, h("span", { class: "muted" }, " · one set of each, then rest")) : null,
     h("div", { class: "ex-head" },
       h("div", { style: { flex: "1", minWidth: "0" } }, h("div", { class: "ex-title" }, ex?.name || x.name), h("div", { class: "ex-meta" }, meta),
         x.up ? h("div", { class: "ex-up" }, icon("arrowUp", 14), `+${kg(x.up.kg)} today: last time every set hit ${x.up.reps}`) : null),
@@ -288,7 +309,8 @@ function renderList() {
   const head = h("div", { class: "card-head", style: { margin: "0 4px -2px" } },
     h("span", { class: "muted", style: { fontSize: "14px", fontWeight: "600" } }, total ? `${done} of ${plural(total, "set")} done` : "No exercises yet"),
     h("button", { type: "button", class: "meta-chip", onclick: changeRest }, icon("timer", 15), `Rest ${fmtRest(a.rest)}`));
-  els.list.replaceChildren(head, ...a.exercises.map((x, e) => exerciseCard(x, e, cur)),
+  const ss = supersets(a.exercises);
+  els.list.replaceChildren(head, ...a.exercises.map((x, e) => exerciseCard(x, e, cur, ss[e])),
     h("div", { class: "live-add" }, h("button", { type: "button", class: "btn gray", onclick: addExercises }, icon("plus", 18), "Add exercise")),
     h("button", { type: "button", class: "live-discard", onclick: () => discard() }, "Discard workout"),
     h("div", { class: "spacer" }));
@@ -333,6 +355,7 @@ function renderDock() {
     const ex = exerciseMap(store.data).get(x.ex);
     const kind = ex?.kind || x.kind, unit = timeUnit(ex);
     const kgStep = ex?.step || 2.5;
+    const plates = h("div", { class: "dock-plates" }, platesLine(ex, st.w));
     const controls = [];
     if (kind === "time") {
       const isMin = unit === "min";
@@ -342,14 +365,17 @@ function renderDock() {
     } else {
       const wStep = bigStep(st.w ?? 0, { step: kgStep, unit: kind === "reps" ? "+ kg" : "kg", label: kind === "reps" ? "Added kilos" : "Kilos",
         format: (v) => fmtKg(v).replace(/ /g, " "), parse: (t) => parseNum(t),
-        onChange: (v) => { st.w = v; save(); syncRowInput(cur.e, cur.s, "w", fmtKg(v).replace(/ /g, "")); } });
+        onChange: (v) => { st.w = v; save(); syncRowInput(cur.e, cur.s, "w", fmtKg(v).replace(/ /g, "")); plates.textContent = platesLine(ex, v); } });
       const rStep = bigStep(st.r ?? 0, { step: 1, unit: "reps", label: "Reps", format: (v) => String(Math.round(v)), parse: (t) => parseNum(t),
         onChange: (v) => { st.r = Math.round(v); save(); syncRowInput(cur.e, cur.s, "r", String(Math.round(v))); } });
       controls.push(...(kind === "reps" ? [rStep, wStep] : [wStep, rStep]));
     }
+    const g = supersets(a.exercises)[cur.e];
     els.dock.replaceChildren(
       h("div", { class: "dock-now" }, h("div", { class: "dock-ex" }, ex?.name || x.name),
-        h("div", { class: "dock-set" }, `Set ${cur.s + 1} of ${x.sets.length}${x.target?.hi && kind !== "time" ? ` · ${x.target.reps}–${x.target.hi} reps` : ""}`)),
+        h("div", { class: "dock-set" }, [setName(x, cur.s), !st.warm && x.target?.hi && kind !== "time" ? `${x.target.reps}–${x.target.hi} reps` : null,
+          g ? `Superset ${g.label}` : null].filter(Boolean).join(" · ")),
+        barOf(ex) ? plates : null),
       h("div", { class: `dock-controls ${controls.length === 1 ? "one" : ""}` }, controls),
       h("button", { type: "button", class: "done-btn", onclick: () => doneCurrent() }, icon("checkBold", 26), "Set done"));
   }
@@ -372,10 +398,11 @@ function renderRest() {
   const kind = ex?.kind || x?.kind || "weight";
   // the next set as it stands: "60 kg × 8", or only "8 reps" while it has no weight yet (not "0 kg × 8")
   const what = !st ? "" : kind === "weight" && !st.w ? (st.r ? plural(st.r, "rep") : "") : (st.r || st.s) ? setText(st, kind, timeUnit(ex)) : "";
-  const nextText = st ? `Set ${r.s + 1} of ${x.sets.length}${what ? ` · ${what}` : ""}` : "";
+  const nextText = st ? `${setName(x, r.s)}${what ? ` · ${what}` : ""}` : "";
+  const load = st ? platesLine(ex, st.w) : "";
   els.dock.replaceChildren(h("div", { class: "rest" }, ring,
     h("div", { class: "rest-side" },
-      h("div", { class: "rest-next" }, "Next", h("b", null, ex?.name || x?.name || ""), nextText),
+      h("div", { class: "rest-next" }, "Next", h("b", null, ex?.name || x?.name || ""), nextText, load ? h("span", { class: "rest-plates" }, load) : null),
       h("div", { class: "rest-btns" },
         h("button", { type: "button", class: "rest-btn", onclick: () => adjust(-15) }, "−15 s"),
         h("button", { type: "button", class: "rest-btn", onclick: () => adjust(15) }, "+15 s"),
@@ -431,7 +458,9 @@ function logSet(e, i) {
   if (rest && settings().sound) scheduleCountdown(a.resting.until, settings().countdown); else cancelCountdown();
   render();
   const next = current(a);
-  if (next && next.e !== e) els.list.querySelector(`.ex-card[data-e="${next.e}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+  const g = supersets(a.exercises)[e];
+  const partner = g && next && next.e >= g.start && next.e <= g.end;
+  if (next && next.e !== e) els.list.querySelector(`.ex-card[data-e="${next.e}"]`)?.scrollIntoView({ block: partner ? "nearest" : "start", behavior: "smooth" });
 }
 
 function toggleDone(e, i) {
@@ -449,7 +478,7 @@ function focusSet(e, i) {
 }
 
 function copyPrev(e, i) {
-  const a = A(), x = a.exercises[e], p = x.prev[i];
+  const a = A(), x = a.exercises[e], wi = workIndex(x, i), p = wi === null ? null : x.prev[wi];
   if (!p || x.sets[i].done) return;
   Object.assign(x.sets[i], { w: p.w ?? null, r: p.r ?? null, s: p.s ?? null });
   save();
@@ -489,19 +518,49 @@ async function exerciseMenu(e) {
   saveNotes();
   const a = A(), x = a.exercises[e];
   const ex = exerciseMap(store.data).get(x.ex);
+  const name = ex?.name || x.name;
+  const kind = ex?.kind || x.kind;
+  const g = supersets(a.exercises)[e];
+  const nextX = a.exercises[e + 1];
+  const linkedNext = g && e < g.end;
   const v = await actionSheet({
-    title: ex?.name || "Exercise",
+    title: name,
     actions: [
       TIPS[x.ex] ? { text: "How to do it", value: "tip" } : null,
+      { text: "Watch how (video)", value: "video" },
+      { text: "Swap for another exercise", value: "swap" },
       { text: "Add a set", value: "add" },
+      kind === "weight" && !x.sets.some((st) => st.warm) ? { text: "Add warm-up sets", value: "warm" } : null,
+      x.sets.some((st) => st.warm && !st.done) ? { text: "Remove warm-up sets", value: "nowarm" } : null,
+      nextX && !linkedNext ? { text: `Superset with ${exerciseMap(store.data).get(nextX.ex)?.name || nextX.name}`, value: "link" } : null,
+      g ? { text: `Take out of superset ${g.label}`, value: "unlink" } : null,
       { text: `Rest for this exercise${x.rest !== null && x.rest !== undefined ? `: ${fmtRest(x.rest)}` : ""}`, value: "rest" },
       e > 0 ? { text: "Move up", value: "up" } : null,
       e < a.exercises.length - 1 ? { text: "Move down", value: "down" } : null,
       { text: "Remove from this workout", value: "remove", style: "destructive" },
     ].filter(Boolean),
   });
-  if (v === "tip") { alertBox({ title: ex?.name || "Exercise", message: TIPS[x.ex] }); return; }
-  if (v === "add") addSet(a, e);
+  if (v === "tip") {
+    const w = await alertBox({ title: name, message: TIPS[x.ex], buttons: [{ text: "Watch a video", value: "video" }, { text: "OK", value: true, style: "bold" }] });
+    if (w === "video") openVideo(name);
+    return;
+  }
+  if (v === "video") { openVideo(name); return; }
+  if (v === "swap") { openSwap(e); return; }
+  if (v === "warm") {
+    if (!addWarmups(a, store.data, e)) {
+      toast(x.sets.find((st) => !st.done)?.w ? "Light enough to start without warm-ups" : "Type the weight of your first set first: the warm-ups come from it");
+      return;
+    }
+  } else if (v === "nowarm") removeWarmups(a, e);
+  else if (v === "link") {
+    linkNext(a.exercises, e, true);
+    retargetRest(a);
+    toast("Superset: one set of each in turn, then rest");
+  } else if (v === "unlink") {
+    unlink(a.exercises, e);
+    retargetRest(a);
+  } else if (v === "add") addSet(a, e);
   else if (v === "up" || v === "down") moveExercise(a, e, v === "up" ? -1 : 1);
   else if (v === "rest") {
     const r = await chooseRest(x.rest ?? a.rest, { title: `Rest after each set of ${ex?.name || "this exercise"}`,
@@ -517,6 +576,41 @@ async function exerciseMenu(e) {
   } else return;
   save();
   render();
+}
+
+/** Another exercise instead of this one (the machine is taken): similar ones first */
+function openSwap(e) {
+  const a = A(), x = a.exercises[e];
+  if (!x) return;
+  const data = store.data, ex = exerciseMap(data).get(x.ex), name = ex?.name || x.name;
+  const inWorkout = a.exercises.map((b) => b.ex);
+  const { similar, same } = alternatives(data, x.ex, inWorkout);
+  let api = null;
+  const swap = (id) => {
+    if (!A()) return;
+    const at = swapExercise(A(), store.data, e, id, Date.now());
+    save();
+    render();
+    toast(`${exerciseMap(store.data).get(id)?.name || "Swapped"} instead, for today`);
+    els.list.querySelector(`.ex-card[data-e="${at}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+  };
+  const row = (o) => {
+    const last = lastFor(data, o.id);
+    return h("button", { type: "button", class: "pick-row", onclick: () => { api.close(); swap(o.id); } },
+      h("span", { class: "pick-name" }, o.name, h("div", { class: "pick-kind" }, last ? `Last: ${setsLine(data, last.entry)} · ${relDay(last.session.date)}` : "Not done yet")),
+      icon("chevron", 15, "chev"));
+  };
+  const done = x.sets.some((st) => st.done);
+  const body = h("div", { class: "form" },
+    h("div", { class: "info-text", style: { padding: "8px 4px 0" } },
+      h("p", null, `The sets still to do go to the one you pick${done ? `; the sets done stay with ${name}` : ""}. Only for today: your plan stays the same.`)),
+    similar.length ? [caption("Similar"), h("div", { class: "group" }, similar.map(row))] : null,
+    same.length ? [caption(ex?.muscle ? `Other ${ex.muscle.toLowerCase()} exercises` : "Other exercises"), h("div", { class: "group" }, same.map(row))] : null,
+    group(actionRow("search", "Another exercise", () => {
+      api.close();
+      openExercisePicker({ title: `Instead of ${name}`, multi: false, dark: true, exclude: inWorkout, onDone: ([id]) => { if (id) swap(id); } });
+    })));
+  api = sheet({ title: `Swap ${name}`, left: { text: "Cancel" }, body, className: "dark-scope" });
 }
 
 function addExercises() {

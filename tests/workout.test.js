@@ -118,7 +118,9 @@ test("the top of the rep range in every set: next time the weight goes up", () =
       { ex: "ex-chest-supported-row", name: "Chest-supported row", kind: "weight", muscle: "Back", sets: [{ w: 50, r: 12 }, { w: 50, r: 10 }] }] } });
   const a = startActive(d, back, NOW);
   assert.deepEqual(a.exercises[0].up, { kg: 5, reps: 12 });            // the pulldown's +/− step is 5 kg
-  assert.deepEqual(a.exercises[0].sets.map((s) => [s.w, s.r]), [[65, 8], [65, 8], [65, 8]]);
+  // the first heavy lift: two warm-up sets (a machine), from the new weight, then the working sets
+  assert.deepEqual(a.exercises[0].sets.map((s) => [s.w, s.r, Boolean(s.warm)]),
+    [[35, 10, true], [50, 5, true], [65, 8, false], [65, 8, false], [65, 8, false]]);
   assert.equal(a.exercises[1].up, null);                                // one set short of 12: same weight
   assert.deepEqual(a.exercises[1].sets.map((s) => s.w), [50, 50, 50]);
 });

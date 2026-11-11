@@ -153,3 +153,67 @@ export const RESEARCH = [
       ["How many sets: Pelland et al. 2024 (BarBend)", "https://barbend.com/scientifically-correct-number-sets-per-workout"]] },
   { text: "Reps come as a range, like 8–12, ending 1–3 reps before you couldn't do another. When every set reaches the top of the range, add weight next time: the app suggests it during the workout.", links: [] },
 ];
+
+// ---------------------------------------------------------------------------
+// What each exercise is, for swapping, warm-ups, plates and sets per muscle
+// ---------------------------------------------------------------------------
+/** The movement: exercises with the same one can stand in for each other (Swap suggests them first) */
+export const PATTERN = {
+  "ex-pull-up": "vpull", "ex-chin-up": "vpull", "ex-lat-pulldown": "vpull", "ex-single-arm-pulldown": "vpull", "ex-straight-arm-pulldown": "vpull",
+  "ex-chest-supported-row": "row", "ex-barbell-row": "row", "ex-dumbbell-row": "row", "ex-seated-cable-row": "row", "ex-t-bar-row": "row",
+  "ex-deadlift": "hinge", "ex-romanian-deadlift": "hinge", "ex-back-extension": "hinge",
+  "ex-face-pull": "rear", "ex-rear-delt-fly": "rear", "ex-reverse-pec-deck": "rear",
+  "ex-bench-press": "hpress", "ex-incline-bench-press": "hpress", "ex-dumbbell-bench-press": "hpress", "ex-incline-dumbbell-press": "hpress",
+  "ex-chest-press-machine": "hpress", "ex-dips": "hpress", "ex-push-up": "hpress",
+  "ex-chest-fly-machine": "fly", "ex-cable-crossover": "fly", "ex-seated-cable-fly": "fly", "ex-dumbbell-fly": "fly",
+  "ex-overhead-press": "vpress", "ex-dumbbell-shoulder-press": "vpress", "ex-machine-shoulder-press": "vpress", "ex-arnold-press": "vpress",
+  "ex-lateral-raise": "lateral", "ex-cable-lateral-raise": "lateral", "ex-upright-row": "lateral",
+  "ex-barbell-curl": "curl", "ex-ez-bar-curl": "curl", "ex-dumbbell-curl": "curl", "ex-hammer-curl": "curl", "ex-incline-dumbbell-curl": "curl",
+  "ex-preacher-curl": "curl", "ex-cable-curl": "curl", "ex-bayesian-curl": "curl",
+  "ex-triceps-pushdown": "ext", "ex-overhead-triceps-extension": "ext", "ex-overhead-cable-extension": "ext", "ex-skull-crusher": "ext",
+  "ex-close-grip-bench-press": "tpress", "ex-bench-dips": "tpress",
+  "ex-squat": "squat", "ex-front-squat": "squat", "ex-leg-press": "squat", "ex-hack-squat": "squat",
+  "ex-bulgarian-split-squat": "lunge", "ex-walking-lunge": "lunge",
+  "ex-leg-extension": "kext", "ex-seated-leg-curl": "kflex", "ex-leg-curl": "kflex",
+  "ex-standing-calf-raise": "calf", "ex-seated-calf-raise": "calf", "ex-calf-raise": "calf",
+  "ex-hip-thrust": "glute", "ex-glute-kickback": "glute",
+  "ex-plank": "core", "ex-crunch": "core", "ex-hanging-leg-raise": "core", "ex-cable-crunch": "core", "ex-ab-wheel": "core",
+  "ex-russian-twist": "core", "ex-cable-woodchopper": "core",
+  "ex-treadmill": "cardio", "ex-rowing-machine": "cardio", "ex-exercise-bike": "cardio", "ex-stair-climber": "cardio",
+};
+
+/** Heavy lifts with several joints: the first one in a workout gets warm-up sets */
+export const COMPOUND = new Set(["ex-squat", "ex-front-squat", "ex-hack-squat", "ex-leg-press", "ex-deadlift", "ex-romanian-deadlift",
+  "ex-bench-press", "ex-incline-bench-press", "ex-dumbbell-bench-press", "ex-incline-dumbbell-press", "ex-chest-press-machine",
+  "ex-close-grip-bench-press", "ex-overhead-press", "ex-dumbbell-shoulder-press", "ex-machine-shoulder-press",
+  "ex-barbell-row", "ex-t-bar-row", "ex-chest-supported-row", "ex-seated-cable-row", "ex-lat-pulldown", "ex-hip-thrust", "ex-bulgarian-split-squat"]);
+
+/** Done with a bar and plates: the bar's weight (an Olympic bar 20 kg, an EZ bar 10 kg) */
+export const BARBELL = {
+  "ex-squat": 20, "ex-front-squat": 20, "ex-deadlift": 20, "ex-romanian-deadlift": 20, "ex-bench-press": 20, "ex-incline-bench-press": 20,
+  "ex-close-grip-bench-press": 20, "ex-overhead-press": 20, "ex-barbell-row": 20, "ex-barbell-curl": 20, "ex-hip-thrust": 20,
+  "ex-ez-bar-curl": 10, "ex-skull-crusher": 10,
+};
+
+/** Which muscles count a set, for the sets per muscle: 1 for the muscle it's for, ½ for one that helps
+ *  (presses work the triceps, rows the biceps), the way the research counts them */
+export const VOLUME_MUSCLES = ["Chest", "Back", "Shoulders", "Biceps", "Triceps", "Quads", "Hamstrings", "Glutes", "Calves", "Core"];
+const PRESS = { Chest: 1, Triceps: 0.5, Shoulders: 0.5 }, PULL = { Back: 1, Biceps: 0.5 }, SQUAT = { Quads: 1, Glutes: 0.5 };
+export const VOLUME = {
+  "ex-pull-up": PULL, "ex-chin-up": PULL, "ex-lat-pulldown": PULL, "ex-single-arm-pulldown": PULL, "ex-chest-supported-row": PULL,
+  "ex-barbell-row": PULL, "ex-dumbbell-row": PULL, "ex-seated-cable-row": PULL, "ex-t-bar-row": PULL,
+  "ex-deadlift": { Back: 1, Hamstrings: 0.5, Glutes: 0.5 }, "ex-back-extension": { Back: 1, Glutes: 0.5, Hamstrings: 0.5 },
+  "ex-face-pull": { Shoulders: 1, Back: 0.5 }, "ex-straight-arm-pulldown": { Back: 1 },
+  "ex-bench-press": PRESS, "ex-incline-bench-press": PRESS, "ex-dumbbell-bench-press": PRESS, "ex-incline-dumbbell-press": PRESS,
+  "ex-chest-press-machine": PRESS, "ex-dips": { Chest: 1, Triceps: 0.5 }, "ex-push-up": { Chest: 1, Triceps: 0.5 },
+  "ex-overhead-press": { Shoulders: 1, Triceps: 0.5 }, "ex-dumbbell-shoulder-press": { Shoulders: 1, Triceps: 0.5 },
+  "ex-machine-shoulder-press": { Shoulders: 1, Triceps: 0.5 }, "ex-arnold-press": { Shoulders: 1, Triceps: 0.5 },
+  "ex-close-grip-bench-press": { Triceps: 1, Chest: 0.5 },
+  "ex-squat": SQUAT, "ex-front-squat": SQUAT, "ex-leg-press": SQUAT, "ex-hack-squat": SQUAT, "ex-walking-lunge": SQUAT, "ex-bulgarian-split-squat": SQUAT,
+  "ex-leg-extension": { Quads: 1 }, "ex-romanian-deadlift": { Hamstrings: 1, Glutes: 0.5 }, "ex-seated-leg-curl": { Hamstrings: 1 }, "ex-leg-curl": { Hamstrings: 1 },
+  "ex-standing-calf-raise": { Calves: 1 }, "ex-seated-calf-raise": { Calves: 1 }, "ex-calf-raise": { Calves: 1 },
+  "ex-hip-thrust": { Glutes: 1, Hamstrings: 0.5 },
+};
+
+/** A video of the exercise: a YouTube search, so there's always something that shows the movement */
+export const videoUrl = (name) => `https://www.youtube.com/results?search_query=${encodeURIComponent(`${name} exercise form`)}`;

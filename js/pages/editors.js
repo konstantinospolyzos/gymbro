@@ -1,10 +1,10 @@
 // Editing the plan: a workout (name, colour, days, rest, exercises), one exercise in it (sets, reps,
 // weight, its own rest), choosing exercises from the library, and the library itself.
 
-import { h, icon, sheet, group, caption, footer, alertBox, toast, segmented, stepper, selectOnFocus, tile, initials } from "../ui.js";
+import { h, icon, sheet, group, caption, footer, alertBox, toast, segmented, stepper, selectOnFocus, tile, initials, switchRow } from "../ui.js";
 import { store } from "../store.js";
 import { uid, MUSCLES, COLORS, KIND_LABELS, exerciseMap } from "../data.js";
-import { WEEKDAYS, WEEK_ORDER, fmtRest, fmtKg, kg, parseNum, timeUnit, fmtSecs, repRange } from "../core.js";
+import { WEEKDAYS, WEEK_ORDER, fmtRest, fmtKg, kg, parseNum, timeUnit, fmtSecs, repRange, barOf, supersets, linkNext } from "../core.js";
 import { TIPS } from "../library.js";
 import { openRecommended } from "./recommend.js";
 import { NO, chooseRest } from "./common.js";
@@ -95,9 +95,17 @@ export function openExerciseEditor(exercise, { dark = false, name = "", onSaved 
   }));
   stepSel.addEventListener("change", () => { ex.step = Number(stepSel.value); });
   const stepRow = h("label", { class: "form-row" }, h("span", { class: "form-label" }, "+/− buttons"), stepSel, icon("chevron", 14, "select-chev"));
+  const BARS = [[0, "No bar"], [10, "EZ bar · 10 kg"], [15, "Bar · 15 kg"], [20, "Olympic bar · 20 kg"]];
+  const barNow = barOf({ ...ex, kind: "weight" }) || 0;
+  const barSel = h("select", { class: "form-select", "aria-label": "Bar" }, BARS.map(([v, t]) => {
+    const o = h("option", { value: String(v) }, t); if (v === barNow) o.selected = true; return o;
+  }));
+  barSel.addEventListener("change", () => { ex.bar = Number(barSel.value); });
+  const barRow = h("label", { class: "form-row" }, h("span", { class: "form-label" }, "Bar"), barSel, icon("chevron", 14, "select-chev"));
   const kindHelp = footer("");
   const showKind = () => {
     stepRow.style.display = ex.kind === "time" ? "none" : "";
+    barRow.style.display = ex.kind === "weight" ? "" : "none";
     kindHelp.textContent = ex.kind === "weight" ? "Log kilos and reps for each set."
       : ex.kind === "reps" ? "Log reps for each set, and extra kilos if you add a weight (a belt or a vest)."
         : "Log how long each set lasts: seconds (a plank), or minutes for cardio.";
@@ -112,7 +120,7 @@ export function openExerciseEditor(exercise, { dark = false, name = "", onSaved 
     caption("Logged as"), h("div", { class: "group", style: { padding: "10px" } },
       segmented(KIND_ORDER.map((k) => KIND_LABELS[k].replace(" (body weight)", "")), KIND_ORDER.indexOf(ex.kind), (i) => { ex.kind = KIND_ORDER[i]; showKind(); }, "full")),
     kindHelp,
-    caption("Weights"), group(stepRow), footer("How much the + and − buttons change the weight during a workout."),
+    caption("Weights"), group(stepRow, barRow), footer("How much the + and − buttons change the weight during a workout. With a bar, the workout shows the plates to put on each side."),
     TIPS[ex.id] ? caption("How to do it") : null, TIPS[ex.id] ? h("div", { class: "group" }, h("div", { class: "info-text", style: { padding: "12px 16px" } }, TIPS[ex.id])) : null,
     caption("Notes"), h("div", { class: "group" }, notes), footer("They're on this exercise in every workout, where you can change them too."),
     !isNew ? h("button", { type: "button", class: "btn destructive-row", onclick: async () => {
@@ -174,7 +182,7 @@ export function openLibrary() {
 // ---------------------------------------------------------------------------
 // One exercise in a workout
 // ---------------------------------------------------------------------------
-function openItemEditor(item, workoutRest, { onSave, onRemove, onMove, canUp, canDown }) {
+function openItemEditor(item, workoutRest, { onSave, onRemove, onMove, canUp, canDown, nextName = null, linked = false, onLink = null }) {
   const ex = exerciseMap(store.data).get(item.ex);
   const kind = ex?.kind || "weight", unit = timeUnit(ex);
   const it = { ...item };
@@ -213,6 +221,8 @@ function openItemEditor(item, workoutRest, { onSave, onRemove, onMove, canUp, ca
     caption("Target"), group(rows),
     footer(kind === "time" ? "" : "Up to: the top of a rep range (8–12). When every set reaches it, the workout tells you to add weight. The weight is only a starting point: each set starts from what you lifted last time."),
     caption("Rest"), group(restRow),
+    ...(nextName ? [caption("Superset"), group(switchRow(`With ${nextName}`, linked, (on) => onLink?.(on), "link")),
+      footer("One set of this, then one of the next exercise, then rest. It saves time; pairs that work different muscles (a press and a row) keep your strength best.")] : []),
     group(canUp ? h("button", { type: "button", class: "action-row", onclick: () => { api.close(); onMove(-1, it); } }, icon("arrowUp", 20, "row-icon"), h("span", { class: "action-text" }, "Move up"), icon("chevron", 15, "chev")) : null,
       canDown ? h("button", { type: "button", class: "action-row", onclick: () => { api.close(); onMove(1, it); } }, icon("arrowDown", 20, "row-icon"), h("span", { class: "action-text" }, "Move down"), icon("chevron", 15, "chev")) : null),
     h("button", { type: "button", class: "btn destructive-row", onclick: () => { api.close(); onRemove(); } }, "Remove from this workout"));
@@ -269,16 +279,23 @@ export function openWorkoutEditor(workout = null) {
   const items = h("div", { class: "group" });
   const drawItems = () => {
     const exMap = exerciseMap(store.data);
+    const ss = supersets(w.items);
+    // the editor works on a copy of the exercise: its superset is the list's, so it's kept from there
+    const keepGroup = (i, n) => { const g = w.items[i].group; if (g) n.group = g; else delete n.group; return n; };
     items.replaceChildren(...w.items.map((it, i) => {
       const ex = exMap.get(it.ex);
-      return h("button", { type: "button", class: "item-row", onclick: () => openItemEditor(it, w.rest, {
+      const next = w.items[i + 1] ? exMap.get(w.items[i + 1].ex) : null;
+      return h("button", { type: "button", class: `item-row ${ss[i] ? "ss" : ""}`, onclick: () => openItemEditor(it, w.rest, {
         canUp: i > 0, canDown: i < w.items.length - 1,
-        onSave: (n) => { w.items[i] = n; drawItems(); },
+        nextName: next ? next.name : null, linked: Boolean(ss[i] && i < ss[i].end),
+        onLink: (on) => { linkNext(w.items, i, on); drawItems(); },
+        onSave: (n) => { w.items[i] = keepGroup(i, n); drawItems(); },
         onRemove: () => { w.items.splice(i, 1); drawItems(); },
-        onMove: (by, n) => { w.items[i] = n; const [x] = w.items.splice(i, 1); w.items.splice(i + by, 0, x); drawItems(); },
+        onMove: (by, n) => { w.items[i] = keepGroup(i, n); const [x] = w.items.splice(i, 1); w.items.splice(i + by, 0, x); drawItems(); },
       }) },
       h("span", { class: "item-num" }, String(i + 1)),
-      h("span", { class: "item-text" }, h("span", { class: "item-name" }, ex?.name || "Exercise"), h("span", { class: "item-sub" }, itemLine(it, ex, w.rest))),
+      h("span", { class: "item-text" }, h("span", { class: "item-name" }, ex?.name || "Exercise"),
+        h("span", { class: "item-sub" }, ss[i] ? h("span", { class: "ss-tag" }, `Superset ${ss[i].label} · `) : null, itemLine(it, ex, w.rest))),
       icon("chevron", 15, "chev"));
     }), h("button", { type: "button", class: "action-row", onclick: () => openExercisePicker({ title: `Add to ${w.name || "the workout"}`, exclude: w.items.map((x) => x.ex), onDone: (ids) => {
       const exMap2 = exerciseMap(store.data);

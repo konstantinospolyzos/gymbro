@@ -11,6 +11,7 @@ import { restoreLive, startWorkout, openLive } from "./pages/live.js";
 import { openWorkoutEditor } from "./pages/editors.js";
 import { chooseWorkout } from "./pages/common.js";
 import { isoDay } from "./core.js";
+import { startUpdates } from "./update.js";
 
 const TABS = [
   { key: "today", title: "Today", icon: "dumbbell", render: renderToday },
@@ -152,4 +153,4 @@ if (store.cloud) store.sync();
 let day = isoDay(new Date());
 setInterval(() => { const d = isoDay(new Date()); if (d !== day) { day = d; if (store.ready && !document.querySelector(".sheet-wrap")) render(); } }, 60000);
 
-if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))) navigator.serviceWorker.register("sw.js").catch(() => {});
+startUpdates();

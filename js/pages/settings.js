@@ -1,10 +1,12 @@
 // Settings: where your workouts are saved (OneDrive, Google Drive or the phone), the rest timer and its
 // beeps, the screen, your weekly goal, the look, the exercise list and backups.
 
-import { h, sheet, group, caption, footer, icon, alertBox, toast, saveFile, pickFile, actionRow, infoRow, switchRow, segmented, stepper, copyText, selectOnFocus } from "../ui.js";
+import { h, sheet, group, caption, footer, icon, alertBox, actionSheet, toast, saveFile, pickFile, actionRow, infoRow, switchRow, segmented, stepper, copyText, selectOnFocus } from "../ui.js";
 import { store, describeData, readBackupFile } from "../store.js";
-import { APP_NAME } from "../data.js";
-import { APP_VERSION, fmtRest, plannedDays, plural } from "../core.js";
+import { APP_NAME, ALL_PLATES } from "../data.js";
+import { APP_VERSION, fmtRest, fmtKg, plannedDays, plural } from "../core.js";
+import { setsCsv, bodyCsv } from "../csv.js";
+import { checkForUpdate } from "../update.js";
 import { redirectUri } from "../cloud/onedrive.js";
 import { testSound, soundWorks } from "../sound.js";
 import { NO, chooseRest } from "./common.js";
@@ -100,8 +102,16 @@ export function openSettings() {
     parts.push(footer(`Each workout has its own rest (Plan › a workout). In the last ${s.countdown || 5} seconds of a rest the screen counts down${s.sound ? " and beeps" : ""}, so you're ready for the next set. The beeps play over your music and follow the silent switch: on silent you only see the countdown.`));
 
     parts.push(caption("During a workout"));
-    parts.push(group(switchRow("Keep the screen on", s.awake, (on) => store.setSetting("awake", on), "bolt")));
-    parts.push(footer("So the timer stays in sight between sets. The workout keeps counting even if the screen locks or you switch apps."));
+    parts.push(group(switchRow("Keep the screen on", s.awake, (on) => store.setSetting("awake", on), "bolt"),
+      switchRow("Warm-up sets", s.warmup !== false, (on) => store.setSetting("warmup", on), "flame")));
+    parts.push(footer("Keep the screen on: the timer stays in sight between sets (the workout keeps counting anyway). Warm-up sets: the first heavy lift of a workout starts with lighter sets, worked out from your weight; they aren't saved with the workout."));
+
+    parts.push(caption("Plates at your gym"));
+    const plates = new Set(s.plates || []);
+    parts.push(h("div", { class: "group plate-picker" }, ALL_PLATES.map((v) => h("button", { type: "button", class: `plate-chip ${plates.has(v) ? "on" : ""}`,
+      "aria-pressed": String(plates.has(v)), "aria-label": `${fmtKg(v)} kg plates`,
+      onclick: () => { if (plates.has(v)) plates.delete(v); else plates.add(v); store.setSetting("plates", ALL_PLATES.filter((x) => plates.has(x))); } }, fmtKg(v)))));
+    parts.push(footer("For barbell lifts the workout shows what to put on each side of the bar. Tap the plates your gym has (kg)."));
 
     parts.push(caption("Weekly goal"));
     const planned = plannedDays(data);
@@ -124,6 +134,12 @@ export function openSettings() {
         saveFile(`gymbro-backup-${stamp()}.json`, "application/json", JSON.stringify({ ...store.data, exported: new Date().toISOString() }, null, 1));
         store.noteManualBackup();
       }, { detail: "Every workout, your plan and exercises, in one file (Save to Files › OneDrive works too)" }),
+      actionRow("list", "Export to CSV", async () => {
+        const v = await actionSheet({ title: "Export to CSV", message: "For Excel, Numbers or Python: one row per set, or per weigh-in.",
+          actions: [{ text: "Every set", value: "sets" }, (data.body || []).length ? { text: "Body weight", value: "body" } : null].filter(Boolean) });
+        if (v === "sets") saveFile(`gymbro-sets-${stamp()}.csv`, "text/csv", setsCsv(store.data));
+        else if (v === "body") saveFile(`gymbro-body-weight-${stamp()}.csv`, "text/csv", bodyCsv(store.data));
+      }, { detail: "Every set you've logged, or your body weight" }),
       actionRow("doc", "Restore a backup", async () => {
         const file = await pickFile(".json,application/json");
         if (!file) return;
@@ -146,6 +162,10 @@ export function openSettings() {
     parts.push(group(h("div", { class: "info-text" },
       h("p", null, h("b", null, "iPhone: "), "open this page in Safari, tap Share, then “Add to Home Screen”. Use the app from its icon (it keeps its own data there)."),
       h("p", null, h("b", null, "Android: "), "open it in Chrome, tap ⋮, then “Add to Home screen” or “Install app”."))));
+    parts.push(group(actionRow("sync", "Check for updates", async () => {
+      toast("Checking…");
+      toast((await checkForUpdate()) ? "A new version is ready: tap Update" : `You have the newest version (${APP_VERSION})`);
+    })));
     parts.push(h("div", { class: "about" }, `${APP_NAME} ${APP_VERSION} · ${describeData(data)}`));
     body.replaceChildren(...parts.filter(Boolean));
   }

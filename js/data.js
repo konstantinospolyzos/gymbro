@@ -19,7 +19,10 @@ export const DEFAULT_SETTINGS = {
   sound: true,
   awake: true,       // keep the screen on during a workout
   goal: null,        // workouts a week; null = the days in your plan
+  warmup: true,      // warm-up sets before the first heavy lift of a workout
+  plates: [25, 20, 15, 10, 5, 2.5, 1.25],   // the plates at your gym, for what to put on the bar
 };
+export const ALL_PLATES = [25, 20, 15, 10, 5, 2.5, 2, 1.25, 1, 0.5];
 
 /** [id, name, muscle, kind, weight step] */
 const LIBRARY = [
@@ -113,7 +116,7 @@ export function libraryExercises() {
 
 export function emptyData() {
   return { app: APP_NAME, version: DATA_VERSION, updated: null, settings: { ...DEFAULT_SETTINGS },
-    exercises: libraryExercises(), workouts: [], schedule: {}, sessions: [] };
+    exercises: libraryExercises(), workouts: [], schedule: {}, sessions: [], body: [] };
 }
 
 /** The sample week (one muscle group a day, from the recommended workouts) as one change */
@@ -140,6 +143,8 @@ function normExercise(e) {
     step: posNum(e.step) || null,
     ...(e.archived ? { archived: true } : {}),
     ...(str(e.notes, 500) ? { notes: str(e.notes, 500) } : {}),
+    // done with a bar: its weight (0: no bar, even if the library has one)
+    ...(posNum(e.bar) !== null ? { bar: Math.min(posNum(e.bar), 100) } : {}),
   };
 }
 
@@ -148,8 +153,23 @@ function normItem(it, i) {
   const reps = int(it.reps, 0, 999), hi = int(it.hi, 0, 999);
   return { id: it.id ? String(it.id) : `i${i + 1}`, ex: String(it.ex), sets: int(it.sets, 1, 20, 3), reps,
     hi: reps !== null && hi !== null && hi > reps ? hi : null,
-    w: roundKg(posNum(it.w)), secs: int(it.secs, 0, 36000), rest: int(it.rest, 0, 1800) };
+    w: roundKg(posNum(it.w)), secs: int(it.secs, 0, 36000), rest: int(it.rest, 0, 1800),
+    // a superset: the exercises next to each other with the same group are done in turn
+    ...(str(it.group, 24) ? { group: str(it.group, 24) } : {}) };
 }
+
+/** A body-weight entry: one a day */
+function normBody(b) {
+  if (!b || typeof b !== "object" || !DAY_RX.test(b.date)) return null;
+  const kg = posNum(b.kg);
+  return kg !== null && kg >= 20 && kg <= 400 ? { date: b.date, kg: roundKg(kg) } : null;
+}
+
+const bodyList = (list) => {
+  const m = new Map();
+  for (const b of (Array.isArray(list) ? list : []).map(normBody)) if (b) m.set(b.date, b);
+  return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+};
 
 function normWorkout(w) {
   if (!w || typeof w !== "object" || !w.id || !str(w.name).trim()) return null;
@@ -220,8 +240,10 @@ export function normalize(raw) {
     sound: rs.sound === undefined ? DEFAULT_SETTINGS.sound : Boolean(rs.sound),
     awake: rs.awake === undefined ? DEFAULT_SETTINGS.awake : Boolean(rs.awake),
     goal: int(rs.goal, 1, 14),
+    warmup: rs.warmup === undefined ? DEFAULT_SETTINGS.warmup : Boolean(rs.warmup),
+    plates: Array.isArray(rs.plates) ? ALL_PLATES.filter((x) => rs.plates.map(Number).includes(x)) : [...DEFAULT_SETTINGS.plates],
   };
-  return { app: APP_NAME, version: DATA_VERSION, updated: raw.updated || null, settings, exercises, workouts, schedule, sessions };
+  return { app: APP_NAME, version: DATA_VERSION, updated: raw.updated || null, settings, exercises, workouts, schedule, sessions, body: bodyList(raw.body) };
 }
 
 function isoLocal(d) {
@@ -245,6 +267,12 @@ export function applyOp(data, op) {
       const e = d.exercises.find((x) => x.id === op.id);
       const notes = str(op.notes, 500).trim();
       if (e) { if (notes) e.notes = notes; else delete e.notes; }
+      break;
+    }
+    case "putBody": {
+      // kg null: the day's entry goes
+      const rest = (d.body || []).filter((b) => b.date !== op.date);
+      d.body = bodyList(op.kg === null || op.kg === undefined ? rest : [...rest, { date: op.date, kg: op.kg }]);
       break;
     }
     case "archiveExercise": {

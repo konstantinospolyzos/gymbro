@@ -161,6 +161,7 @@ export function lineChart(points, { height = 190, format = String, ariaLabel = "
         dots.forEach((c, k) => c.classList.toggle("on", k === i));
         guide.setAttribute("x1", i >= 0 ? pts[i][0] : -10);
         guide.setAttribute("x2", i >= 0 ? pts[i][0] : -10);
+        guide.classList.toggle("on", i >= 0);
       },
     };
   });

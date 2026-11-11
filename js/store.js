@@ -161,6 +161,8 @@ class Store {
   saveExercise(exercise) { this.commit({ type: "putExercise", exercise }); }
   archiveExercise(id, archived = true) { this.commit({ type: "archiveExercise", id, archived }); }
   setExerciseNotes(id, notes) { this.commit({ type: "setExerciseNotes", id, notes }); }
+  /** A weigh-in for a day; kg null deletes it */
+  putBody(date, kg) { this.commit({ type: "putBody", date, kg }); }
   saveWorkout(workout) { this.commit({ type: "putWorkout", workout }); }
   deleteWorkout(id) { this.commit({ type: "deleteWorkout", id }); }
   moveWorkout(id, by) { this.commit({ type: "moveWorkout", id, by }); }

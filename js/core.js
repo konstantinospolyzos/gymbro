@@ -1,9 +1,10 @@
 // Formatting and the numbers behind the progress: estimated one-rep max, records, comparisons with
 // earlier workouts, weekly totals and streaks. No page code here, so it can be tested on its own.
 
-import { exerciseMap, bySessionStart } from "./data.js";
+import { exerciseMap, bySessionStart, uid, DEFAULT_SETTINGS } from "./data.js";
+import { PATTERN, BARBELL, VOLUME, VOLUME_MUSCLES } from "./library.js";
 
-export const APP_VERSION = "1.2";
+export const APP_VERSION = "1.3";
 
 // ---------------------------------------------------------------------------
 // Dates (local time; a workout's "date" is the day it started)
@@ -448,6 +449,190 @@ export function exerciseSeries(data, exId, metric) {
       : metric === "reps" ? st.maxReps : metric === "total" ? st.reps : st.maxSecs;
     return { x: parseDay(h.session.date).getTime(), y, h };
   }).filter((p) => p.y > 0);
+}
+
+// ---------------------------------------------------------------------------
+// The bar: what to put on each side
+// ---------------------------------------------------------------------------
+/** The bar's weight when an exercise is done with a bar and plates, else null */
+export function barOf(ex) {
+  if (!ex || ex.kind !== "weight") return null;
+  const b = ex.bar ?? BARBELL[ex.id] ?? null;
+  return b ? b : null;
+}
+
+/** The plates for each side of the bar, the biggest first. left: what the plates can't make (per side). */
+export function platesFor(total, bar = 20, plates = DEFAULT_SETTINGS.plates) {
+  if (!total || total < bar) return { side: [], left: 0, under: Boolean(total) && total < bar };
+  let left = Math.round(((total - bar) / 2) * 1000) / 1000;
+  const side = [];
+  for (const p of [...plates].sort((a, b) => b - a)) {
+    while (left + 1e-9 >= p) { side.push(p); left = Math.round((left - p) * 1000) / 1000; }
+  }
+  return { side, left, under: false };
+}
+
+/** "Each side: 20 + 10 + 2.5" */
+export function platesText(total, bar, plates) {
+  const r = platesFor(total, bar, plates);
+  if (r.under) return `Less than the bar (${fmtKg(bar)}${NBSP}kg)`;
+  if (!r.side.length && !r.left) return total ? `Just the bar (${fmtKg(bar)}${NBSP}kg)` : "";
+  const each = r.side.map(fmtKg).join(" + ");
+  return `Each side: ${each || "nothing"}${r.left ? ` (${fmtKg(r.left)}${NBSP}kg short)` : ""}`;
+}
+
+// ---------------------------------------------------------------------------
+// Warm-up sets
+// ---------------------------------------------------------------------------
+/** Warm-up sets before a heavy lift, from its working weight: heavier and fewer reps as they get closer.
+ *  Two for a machine, cable or dumbbells; up to four for a heavy barbell lift. None when the weight is
+ *  light (the first set is the warm-up then). */
+export function warmupSets(work, { step = 2.5, bar = null } = {}) {
+  if (!work || work < (bar ? bar + 10 : 20)) return [];
+  const plan = !bar ? [[0.5, 10], [0.75, 5]]
+    : work >= 100 ? [[0.4, 8], [0.6, 5], [0.75, 3], [0.85, 2]] : work >= 60 ? [[0.5, 8], [0.7, 5], [0.85, 2]] : [[0.5, 8], [0.75, 4]];
+  const out = [];
+  for (const [part, r] of plan) {
+    let w = Math.round((work * part) / step) * step;
+    if (bar) w = Math.max(bar, w);
+    w = Math.round(w * 1000) / 1000;
+    if (w >= work || (out.length && w <= out.at(-1).w)) continue;
+    out.push({ w, r });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Supersets: exercises next to each other with the same group, done in turn
+// ---------------------------------------------------------------------------
+/** For each exercise (of a workout in the plan or in progress): null, or its superset {label, pos, size, start, end} */
+export function supersets(list) {
+  const out = list.map(() => null);
+  let n = 0;
+  for (let i = 0; i < list.length;) {
+    let j = i;
+    while (list[i].group && j + 1 < list.length && list[j + 1].group === list[i].group) j += 1;
+    if (j > i) {
+      const label = String.fromCharCode(65 + (n++ % 26));
+      for (let k = i; k <= j; k++) out[k] = { label, pos: k - i, size: j - i + 1, start: i, end: j };
+    }
+    i = j + 1;
+  }
+  return out;
+}
+
+/** A superset of one is none */
+function tidyGroups(list) {
+  for (let i = 0; i < list.length; i++) {
+    const g = list[i].group;
+    if (g && list[i - 1]?.group !== g && list[i + 1]?.group !== g) delete list[i].group;
+  }
+}
+
+/** Do an exercise in turn with the next one (on), or not any more (off) */
+export function linkNext(list, i, on) {
+  const a = list[i], b = list[i + 1];
+  if (!a || !b) return;
+  if (on) {
+    const g = a.group || b.group || uid("g");
+    const old = b.group;
+    if (old && old !== g) for (let k = i + 1; k < list.length && list[k].group === old; k++) list[k].group = g;
+    a.group = g; b.group = g;
+  } else if (a.group && a.group === b.group) {
+    const g = uid("g"), old = b.group;
+    for (let k = i + 1; k < list.length && list[k].group === old; k++) list[k].group = g;
+  }
+  tidyGroups(list);
+}
+
+/** Take one exercise out of its superset */
+export function unlink(list, i) {
+  if (!list[i]?.group) return;
+  if (i > 0) linkNext(list, i - 1, false);
+  linkNext(list, i, false);
+  delete list[i].group;
+  tidyGroups(list);
+}
+
+// ---------------------------------------------------------------------------
+// Sets per muscle in a week
+// ---------------------------------------------------------------------------
+/** Which muscles a set counts for: {Chest: 1, Triceps: 0.5} */
+export function volumeOf(exId, ex) {
+  if (VOLUME[exId]) return VOLUME[exId];
+  const m = ex?.muscle;
+  return !m || m === "Cardio" || m === "Other" ? {} : { [m]: 1 };
+}
+
+/** This week (Monday to Sunday): hard sets per muscle done so far, and what the plan has for the week */
+export function weekMuscles(data, now = today()) {
+  const from = startOfWeek(now), fromIso = isoDay(from), toIso = isoDay(addDays(from, 6));
+  const exMap = exerciseMap(data);
+  const done = new Map(), planned = new Map();
+  const add = (m, exId, ex, n) => { for (const [k, f] of Object.entries(volumeOf(exId, ex))) m.set(k, (m.get(k) || 0) + n * f); };
+  for (const s of data.sessions) {
+    if (s.date < fromIso || s.date > toIso) continue;
+    for (const e of s.exercises) add(done, e.ex, exMap.get(e.ex) || e, e.sets.length);
+  }
+  for (const id of Object.values(data.schedule)) {
+    const w = data.workouts.find((x) => x.id === id);
+    if (w) for (const it of w.items) add(planned, it.ex, exMap.get(it.ex), it.sets);
+  }
+  const names = [...VOLUME_MUSCLES, ...[...done.keys(), ...planned.keys()].filter((k) => !VOLUME_MUSCLES.includes(k))];
+  return [...new Set(names)].map((muscle) => ({ muscle, done: done.get(muscle) || 0, planned: planned.get(muscle) || 0 }))
+    .filter((x) => VOLUME_MUSCLES.includes(x.muscle) || x.done || x.planned);
+}
+
+// ---------------------------------------------------------------------------
+// Lifts that stopped going up
+// ---------------------------------------------------------------------------
+/** Exercises whose best (e1RM, or reps) is at least four weeks old although the last three times or more
+ *  tried to beat it, and that you still do (in the last three weeks), the longest stuck first */
+export function plateaus(data, now = today(), { weeks = 4, tries = 3 } = {}) {
+  const exMap = exerciseMap(data);
+  const cut = isoDay(addDays(now, -7 * weeks)), recent = isoDay(addDays(now, -21));
+  const out = [];
+  for (const [id, list] of historyIndex(data)) {
+    const kind = list.at(-1).entry.kind;
+    if (kind === "time" || list.length < tries + 1 || list.at(-1).session.date < recent) continue;
+    let bi = 0;
+    list.forEach((x, i) => { if (score(x.stats, kind) > score(list[bi].stats, kind)) bi = i; });
+    const best = list[bi], since = list.length - 1 - bi;
+    if (best.session.date > cut || since < tries) continue;
+    out.push({ id, name: exMap.get(id)?.name || best.entry.name, kind, best, since,
+      weeks: Math.floor(daysBetween(parseDay(best.session.date), now) / 7) });
+  }
+  return out.sort((a, b) => b.weeks - a.weeks || b.since - a.since);
+}
+
+// ---------------------------------------------------------------------------
+// Swapping an exercise
+// ---------------------------------------------------------------------------
+/** What can stand in for an exercise: the same movement first (similar), then the same muscle group;
+ *  the ones you've done most recently first */
+export function alternatives(data, exId, exclude = []) {
+  const ex = exerciseMap(data).get(exId);
+  const skip = new Set([exId, ...exclude]);
+  const last = (id) => exerciseHistory(data, id).at(-1)?.session.start || 0;
+  const pool = data.exercises.filter((e) => !e.archived && !skip.has(e.id));
+  const recentFirst = (a, b) => last(b.id) - last(a.id);
+  const pat = PATTERN[exId];
+  const similar = pat ? pool.filter((e) => PATTERN[e.id] === pat).sort(recentFirst) : [];
+  const same = pool.filter((e) => e.muscle === ex?.muscle && !similar.includes(e)).sort(recentFirst);
+  return { similar, same };
+}
+
+// ---------------------------------------------------------------------------
+// Body weight
+// ---------------------------------------------------------------------------
+/** The latest weigh-in, and the change since the first one in about the last n days */
+export function bodyTrend(data, days = 30, now = today()) {
+  const list = data.body || [];
+  if (!list.length) return null;
+  const last = list.at(-1), cut = isoDay(addDays(now, -days));
+  const base = list.find((b) => b.date >= cut);
+  return { last, count: list.length, since: base && base.date < last.date ? base.date : null,
+    change: base && base.date < last.date ? Math.round((last.kg - base.kg) * 10) / 10 : null };
 }
 
 export { bySessionStart };
