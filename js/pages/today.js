@@ -28,6 +28,13 @@ function exerciseList(data, w) {
   }));
 }
 
+/** Something else today (the plan stays as it is): one of your workouts, a muscle group's recommended workout, or an empty one */
+export async function startOther(title = "Start a workout") {
+  const w = await chooseWorkout(title, { recommended: true });
+  if (w === "recommended") openRecommended();
+  else if (w) startWorkout(w === "empty" ? null : w);
+}
+
 function workoutHero(data, w, label) {
   const est = expectedMinutes(data, w);
   const restBtn = h("button", { type: "button", class: "meta-chip", "aria-label": "Change the rest between sets", onclick: async () => {
@@ -47,7 +54,11 @@ function workoutHero(data, w, label) {
       h("span", { class: "meta-chip" }, `${est.usual ? "usually" : "about"} ${est.minutes} min`),
       restBtn),
     w.items.length ? exerciseList(data, w) : h("div", { class: "muted" }, "No exercises yet. Tap the pencil to add some."),
-    h("button", { type: "button", class: `start-btn tile-${w.color}`, onclick: () => startWorkout(w) }, icon("play", 22), "Start workout"));
+    h("button", { type: "button", class: `start-btn tile-${w.color}`, onclick: () => startWorkout(w) }, icon("play", 22), "Start workout"),
+    // or something else today, without changing the plan
+    h("div", { class: "button-row" },
+      h("button", { type: "button", class: "btn gray", "aria-label": "Another workout today", onclick: () => startOther(`Instead of ${w.name} today`) }, icon("list", 16), "Another"),
+      h("button", { type: "button", class: "btn gray", onclick: () => openRecommended() }, icon("sparkle", 16), "Recommended")));
 }
 
 function activeCard(a) {
@@ -78,7 +89,7 @@ function doneCard(data, sessions) {
       prs ? chip(`${prs} new PR${prs > 1 ? "s" : ""}`, "gold") : null),
     h("div", { class: "button-row" },
       h("button", { type: "button", class: "btn tinted", onclick: () => openSessionDetail(s) }, "Summary"),
-      h("button", { type: "button", class: "btn gray", onclick: async () => { const w = await chooseWorkout("Another workout"); if (w) startWorkout(w === "empty" ? null : w); } }, "Another")));
+      h("button", { type: "button", class: "btn gray", onclick: () => startOther("Another workout") }, "Another")));
 }
 
 function restCard(data) {
@@ -88,8 +99,7 @@ function restCard(data) {
       h("div", { class: "hero-text" }, h("div", { class: "caption" }, "Rest day"), h("div", { class: "hero-name", style: { fontSize: "22px" } }, "Nothing planned today"),
         next ? h("div", { class: "muted", style: { marginTop: "4px" } }, `Next: ${next.when} · ${next.w.name}`) : null)),
     h("div", { class: "button-row" },
-      h("button", { type: "button", class: "btn tinted", onclick: async () => { const w = await chooseWorkout(); if (w) startWorkout(w === "empty" ? null : w); } },
-        icon("play", 16), "Train anyway"),
+      h("button", { type: "button", class: "btn tinted", onclick: () => startOther() }, icon("play", 16), "Train anyway"),
       h("button", { type: "button", class: "btn gray", onclick: () => openRecommended() }, icon("sparkle", 16), "Recommended")));
 }
 

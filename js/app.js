@@ -1,15 +1,14 @@
 // GymBro for phones: the app shell (navigation bar, tabs, pages, the cloud button).
 import { store, describeData } from "./store.js";
 import { h, icon, alertBox, toast } from "./ui.js";
-import { renderToday } from "./pages/today.js";
+import { renderToday, startOther } from "./pages/today.js";
 import { renderPlan } from "./pages/plan.js";
 import { renderHistory, openSessionEditor } from "./pages/history.js";
 import { renderProgress } from "./pages/progress.js";
 import { renderWelcome } from "./pages/welcome.js";
 import { openSettings, applyTheme } from "./pages/settings.js";
-import { restoreLive, startWorkout, openLive } from "./pages/live.js";
+import { restoreLive, openLive } from "./pages/live.js";
 import { openWorkoutEditor } from "./pages/editors.js";
-import { chooseWorkout } from "./pages/common.js";
 import { isoDay } from "./core.js";
 import { startUpdates } from "./update.js";
 
@@ -106,8 +105,7 @@ async function addNew() {
   if (current === "plan") return openWorkoutEditor(null);
   if (current === "history") return openSessionEditor(null);
   if (store.active) return openLive();
-  const w = await chooseWorkout();
-  if (w) startWorkout(w === "empty" ? null : w);
+  return startOther();
 }
 
 // ---------------------------------------------------------------------------

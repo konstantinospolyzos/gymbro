@@ -46,15 +46,16 @@ export function workoutLine(w) {
 }
 
 /** Which workout to start: your plan's workouts, or an empty one. Resolves to a workout, "empty" or null. */
-export async function chooseWorkout(title = "Start a workout") {
+export async function chooseWorkout(title = "Start a workout", { recommended = false } = {}) {
   const data = store.data;
   const v = await actionSheet({
     title,
     actions: [...data.workouts.map((w) => ({ text: w.name, value: w.id, color: w.color })),
-      { text: "Empty workout", value: "empty", detail: "Add exercises as you go" }],
+      recommended ? { text: "Recommended for a muscle group", value: "recommended", detail: "Back, chest, legs… with the best exercises for it" } : null,
+      { text: "Empty workout", value: "empty", detail: "Add exercises as you go" }].filter(Boolean),
   });
   if (v === null) return null;
-  return v === "empty" ? "empty" : data.workouts.find((w) => w.id === v) || null;
+  return v === "empty" || v === "recommended" ? v : data.workouts.find((w) => w.id === v) || null;
 }
 
 export const REST_CHOICES = [0, 30, 45, 60, 75, 90, 120, 150, 180, 240, 300];
