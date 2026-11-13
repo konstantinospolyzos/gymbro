@@ -7,11 +7,12 @@
 // that the next tap opens the Microsoft window again, which usually closes by itself straight away.
 
 import { AuthError, lsGet, lsSet, lsDel, FILE_NAME, BACKUP_PREFIX } from "./common.js";
+import { key } from "../profiles.js";
 
 const LOGIN = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
 const GRAPH = "https://graph.microsoft.com/v1.0";
 const SCOPE = "openid profile offline_access Files.ReadWrite.AppFolder";
-const KEY_TOKEN = "gym.onedrive";
+const KEY_TOKEN = key("onedrive");          // each profile signs in on its own
 const KEY_PKCE = "gym.onedrivePkce";
 export const KEY_RESULT = "gym.onedriveResult";
 const DAY = 86400000;

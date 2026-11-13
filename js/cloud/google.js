@@ -3,8 +3,9 @@
 // that the next tap signs in again (a Google window may flash for a second).
 
 import { AuthError, lsGet, lsSet, lsDel, FILE_NAME } from "./common.js";
+import { key, tagKind } from "../profiles.js";
 
-const KEY_TOKEN = "gym.googleToken";
+const KEY_TOKEN = key("googleToken");      // each profile signs in on its own
 export const FOLDER_NAME = "GymBro";
 const TAG = "gymBro";                 // marks this app's files in Drive (appProperties)
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
@@ -71,7 +72,8 @@ export class GoogleDrive {
       }
       this._resolve = resolve;
       this._reject = reject;
-      this.client.requestAccessToken({ prompt: "", login_hint: this.hint || undefined });
+      // the first sign-in of a profile: choose the account (on a shared phone it may be someone else's)
+      this.client.requestAccessToken({ prompt: this.hint ? "" : "select_account", login_hint: this.hint || undefined });
     });
   }
 
@@ -127,7 +129,7 @@ export class GoogleDrive {
     return res?.files?.[0] || null;
   }
 
-  async find() { return meta(await this._find("data")); }
+  async find() { return meta(await this._find(tagKind("data"))); }
 
   async getMeta(id) {
     const f = await this.call("GET", `${API}/files/${id}?fields=id,name,version,modifiedTime,webViewLink,trashed`);
@@ -152,7 +154,7 @@ export class GoogleDrive {
   async create(data, { name = FILE_NAME, kind = "data" } = {}) {
     const parent = await this.folder();
     const boundary = `gym${Math.random().toString(36).slice(2)}`;
-    const m = { name, mimeType: "application/json", parents: [parent], appProperties: { [TAG]: kind } };
+    const m = { name, mimeType: "application/json", parents: [parent], appProperties: { [TAG]: tagKind(kind) } };
     const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(m)}\r\n` +
       `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(data, null, 1)}\r\n--${boundary}--`;
     return meta(await this.call("POST", `${UPLOAD}/files?uploadType=multipart&fields=id,name,version,modifiedTime,webViewLink`, {
@@ -168,7 +170,7 @@ export class GoogleDrive {
 
   /** Weekly copies, newest first */
   async backups() {
-    const q = encodeURIComponent(`appProperties has { key='${TAG}' and value='backup' } and trashed=false`);
+    const q = encodeURIComponent(`appProperties has { key='${TAG}' and value='${tagKind("backup")}' } and trashed=false`);
     const res = await this.call("GET", `${API}/files?q=${q}&spaces=drive&orderBy=createdTime desc&pageSize=100&fields=files(id,name,createdTime)`);
     return (res?.files || []).map((f) => ({ id: f.id, createdTime: f.createdTime }));
   }

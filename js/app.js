@@ -11,6 +11,8 @@ import { restoreLive, openLive } from "./pages/live.js";
 import { openWorkoutEditor } from "./pages/editors.js";
 import { isoDay } from "./core.js";
 import { startUpdates } from "./update.js";
+import { profiles, current as currentProfile } from "./profiles.js";
+import { avatar, profileMenu } from "./pages/profiles.js";
 
 const TABS = [
   { key: "today", title: "Today", icon: "dumbbell", render: renderToday },
@@ -29,6 +31,9 @@ const syncBtn = document.getElementById("sync-btn");
 const addBtn = document.getElementById("add-btn");
 const tabbar = document.getElementById("tabbar");
 let statusPill = null;
+// with more than one profile on the phone: whose app this is, at the top (tap to switch)
+const profileBtn = h("button", { id: "profile-btn", class: "nav-btn", type: "button", onclick: () => profileMenu() });
+syncBtn.before(profileBtn);
 
 function go(key) {
   if (!tabKeys.includes(key)) return;
@@ -52,6 +57,10 @@ store.chooser = (mine, theirs, label) => alertBox({
 const SYNC_ICONS = { local: "phone", synced: "cloudCheck", syncing: "sync", pending: "cloudUp", signin: "cloudUp", offline: "cloudOff", error: "cloudOff", idle: "cloud" };
 
 function updateChrome() {
+  const me = currentProfile();
+  profileBtn.hidden = profiles().length < 2;
+  profileBtn.replaceChildren(avatar(me, 30));
+  profileBtn.setAttribute("aria-label", `Profile: ${me.name}. Switch`);
   const st = store.status;
   syncBtn.replaceChildren(icon(SYNC_ICONS[st.state] || "cloud", 23));
   syncBtn.className = `nav-btn sync-state-${st.state}`;

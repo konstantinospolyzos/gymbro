@@ -7,6 +7,8 @@ import { APP_NAME, ALL_PLATES } from "../data.js";
 import { APP_VERSION, fmtRest, fmtKg, plannedDays, plural } from "../core.js";
 import { setsCsv, bodyCsv } from "../csv.js";
 import { checkForUpdate } from "../update.js";
+import { current as currentProfile, profiles } from "../profiles.js";
+import { avatar, openProfiles } from "./profiles.js";
 import { redirectUri } from "../cloud/onedrive.js";
 import { testSound, soundWorks } from "../sound.js";
 import { NO, chooseRest } from "./common.js";
@@ -66,7 +68,13 @@ export function openSettings() {
 
   function build() {
     const m = store.meta, data = store.data, s = data.settings;
-    const parts = [caption("Where your workouts are saved")];
+    const me = currentProfile(), count = profiles().length;
+    const parts = [caption("Profile"),
+      group(h("button", { type: "button", class: "profile-row", onclick: () => openProfiles() }, avatar(me, 38),
+        h("span", { class: "profile-text" }, h("span", { class: "profile-name" }, me.name || "Me"),
+          h("span", { class: "profile-sub" }, count > 1 ? `${count} profiles on this phone · switch, add or rename` : "Add a profile for someone else who trains")),
+        icon("chevron", 15, "chev"))),
+      caption("Where your workouts are saved")];
     const cloud = store.cloud;
     if (cloud) {
       parts.push(group(

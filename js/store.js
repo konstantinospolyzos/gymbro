@@ -11,12 +11,15 @@ import { emptyData, normalize, applyOp, describeData, hasContent } from "./data.
 import { OneDrive } from "./cloud/onedrive.js";
 import { GoogleDrive } from "./cloud/google.js";
 import { AuthError, lsGet, lsSet, lsDel, backupName } from "./cloud/common.js";
+import { key } from "./profiles.js";
 
-const KEY_DATA = "gym.data";
-const KEY_META = "gym.meta";
-const KEY_PREFS = "gym.prefs";
-const KEY_BASE = "gym.cloudCopy";        // the file as it was last seen in the cloud
-const KEY_ACTIVE = "gym.active";         // the workout in progress
+// each profile keeps its own (the first profile under the original names)
+const KEY_DATA = key("data");
+const KEY_META = key("meta");
+const KEY_PREFS = key("prefs");
+const KEY_BASE = key("cloudCopy");       // the file as it was last seen in the cloud
+const KEY_ACTIVE = key("active");        // the workout in progress
+const KEY_OD_ID = "gym.odClientId";      // the OneDrive app ID pasted in Settings: for every profile on the phone
 const BACKUP_EVERY = 7 * 86400000;       // a copy of the data file in the cloud once a week...
 const BACKUPS_KEPT = 8;                  // ...keeping the last 8 (about two months)
 export const CLOUDS = ["onedrive", "gdrive"];
@@ -25,7 +28,7 @@ class Store {
   constructor() {
     this.prefs = lsGet(KEY_PREFS, {}) || {};
     this.clouds = {
-      onedrive: new OneDrive(CONFIG.oneDriveClientId || this.prefs.odClientId || ""),
+      onedrive: new OneDrive(CONFIG.oneDriveClientId || lsGet(KEY_OD_ID, "") || (lsGet("gym.prefs", {}) || {}).odClientId || ""),
       gdrive: new GoogleDrive(CONFIG.googleClientId),
     };
     this.data = null;
@@ -77,7 +80,7 @@ class Store {
 
   /** The OneDrive app ID pasted in Settings (config.js wins when it has one) */
   setOneDriveId(id) {
-    this.setPref("odClientId", id || "");
+    lsSet(KEY_OD_ID, id || "");
     this.clouds.onedrive = new OneDrive(CONFIG.oneDriveClientId || id || "");
     this.clouds.onedrive.warmUp();
   }

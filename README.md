@@ -18,6 +18,8 @@ Your gym week on your phone, in the same iOS look as the Savings Tracker and Glo
 - **Progress:** workouts a week and your streak, volume and time per week, hard sets per muscle this week against
   10–20, body weight, records, lifts that stopped going up (and what helps), and each exercise's best set over time
 - **Export:** every set, or your body weight, as CSV for Excel or Python
+- **Profiles:** more than one person on a phone, each with their own plan, workouts, body weight and settings, and
+  their own OneDrive or Google Drive sign-in (the first profile keeps `gymbro.json`; Anna's is `gymbro-anna.json`)
 
 Data is a JSON file in your own OneDrive (or Google Drive, or on the phone only), synced change by change, the same
 way as the Savings Tracker. The app itself is saved on the phone, so it opens at once at the gym, with or without a
@@ -31,6 +33,7 @@ signal; a new version downloads in the background and a bar offers to switch to 
 - `js/workout.js`: the workout in progress: the next set, the rest, what gets saved, when to add weight
 - `js/library.js`: the recommended workouts and weeks, how to do each exercise, the research behind them (with links),
   and what each exercise is (its movement, bar and the muscles a set counts for)
+- `js/profiles.js`: the profiles on the phone and what each keeps (its storage names and its cloud file)
 - `js/csv.js`: the CSV export; `js/update.js`: "New version ready"; `sw.js`: the offline copy of the app (its
   `VERSION` is the app's version: change both for a new version)
 - `js/store.js`: syncing, offline queue, weekly backup in the cloud; `js/cloud/onedrive.js` (Microsoft Graph, the

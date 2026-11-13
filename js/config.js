@@ -8,4 +8,8 @@ export const CONFIG = {
   // Google Drive: the Savings Tracker's Google sign-in. It's allowed on https://konstantinospolyzos.github.io,
   // so it works for every app there, this one too. Leave it empty to hide Google Drive.
   googleClientId: "902106036962-evnjgsvotoiaj1328ii6pbmsphrkmasq.apps.googleusercontent.com",
+
+  // Profiles: the name of the profile that gets the workouts already on a phone (from before there were
+  // profiles). A new phone asks for the name instead.
+  ownerName: "Konstantinos",
 };
