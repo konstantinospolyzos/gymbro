@@ -12,7 +12,7 @@ import { openWorkoutEditor } from "./pages/editors.js";
 import { isoDay } from "./core.js";
 import { startUpdates } from "./update.js";
 import { profiles, current as currentProfile } from "./profiles.js";
-import { avatar, profileMenu } from "./pages/profiles.js";
+import { profileMenu } from "./pages/profiles.js";
 
 const TABS = [
   { key: "today", title: "Today", icon: "dumbbell", render: renderToday },
@@ -31,9 +31,11 @@ const syncBtn = document.getElementById("sync-btn");
 const addBtn = document.getElementById("add-btn");
 const tabbar = document.getElementById("tabbar");
 let statusPill = null;
-// with more than one profile on the phone: whose app this is, at the top (tap to switch)
-const profileBtn = h("button", { id: "profile-btn", class: "nav-btn", type: "button", onclick: () => profileMenu() });
-syncBtn.before(profileBtn);
+// the middle of the bar: whose app this is, in blue (tap to switch or add a profile); once the page
+// scrolls, the page's name takes its place
+const pageTitle = h("span", { class: "nav-page-title" });
+const profileName = h("button", { id: "nav-profile", type: "button", onclick: () => profileMenu() });
+navTitle.replaceChildren(pageTitle, profileName);
 
 function go(key) {
   if (!tabKeys.includes(key)) return;
@@ -58,9 +60,8 @@ const SYNC_ICONS = { local: "phone", synced: "cloudCheck", syncing: "sync", pend
 
 function updateChrome() {
   const me = currentProfile();
-  profileBtn.hidden = profiles().length < 2;
-  profileBtn.replaceChildren(avatar(me, 30));
-  profileBtn.setAttribute("aria-label", `Profile: ${me.name}. Switch`);
+  profileName.textContent = me.name || "Me";
+  profileName.setAttribute("aria-label", `${me.name || "Me"}: ${profiles().length > 1 ? "switch profile" : "profiles"}`);
   const st = store.status;
   syncBtn.replaceChildren(icon(SYNC_ICONS[st.state] || "cloud", 23));
   syncBtn.className = `nav-btn sync-state-${st.state}`;
@@ -94,7 +95,7 @@ function render() {
   }
   const tab = TABS.find((t) => t.key === current);
   const [subtitle, ...content] = tab.render();
-  navTitle.textContent = tab.title;
+  pageTitle.textContent = tab.title;
   statusPill = h("button", { type: "button", class: "status-pill" });
   statusPill.addEventListener("click", () => (store.cloud ? store.syncFromTap().then(() => toast(store.status.text)) : openSettings()));
   const showPill = current === "today" || ["signin", "error"].includes(store.status.state);

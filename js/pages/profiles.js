@@ -81,10 +81,11 @@ export function openProfiles() {
   api = sheet({ title: "Profiles", right: { text: "Done", bold: true, onClick: (a) => a.close() }, body });
 }
 
-/** The badge at the top: switch in two taps */
+/** The name at the top: switch in two taps (with only one profile: the list, to add one) */
 export async function profileMenu() {
   const me = current();
   const others = profiles().filter((p) => p.id !== me.id);
+  if (!others.length) { openProfiles(); return; }
   const v = await actionSheet({ title: `You're ${me.name || "in this profile"}`, actions: [
     ...others.map((p) => ({ text: `Switch to ${p.name}`, value: p.id })),
     { text: "Profiles…", value: "all" }] });
