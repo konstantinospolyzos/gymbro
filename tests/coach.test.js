@@ -10,6 +10,28 @@ const session = (id, date, exercises, extra = {}) => ({ type: "putSession", sess
 const sets = (w, ...reps) => reps.map((r) => ({ w, r }));
 const plain = (t) => t.replace(/\u00a0/g, " ");          // the app writes "2 min" with a no-break space
 
+/** Claude's API streaming an answer: thinking (with its signature), then the text, cut into awkward pieces */
+function sse(text, { stop = "end_turn", events = null, cut = 7, end = true } = {}) {
+  const evs = events || [
+    { type: "message_start", message: { id: "m1", role: "assistant", content: [] } },
+    { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "", signature: "" } },
+    { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "" } },
+    { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "SIG123" } },
+    { type: "content_block_stop", index: 0 },
+    { type: "ping" },
+    { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
+    ...[...text.matchAll(/[\s\S]{1,5}/g)].map((m) => ({ type: "content_block_delta", index: 1, delta: { type: "text_delta", text: m[0] } })),
+    { type: "content_block_stop", index: 1 },
+    { type: "message_delta", delta: { stop_reason: stop }, usage: { output_tokens: 9 } },
+    ...(end ? [{ type: "message_stop" }] : []),
+  ];
+  const wire = evs.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join("");
+  const bytes = new TextEncoder().encode(wire);
+  let i = 0;
+  const stream = new ReadableStream({ pull(c) { if (i >= bytes.length) c.close(); else { c.enqueue(bytes.slice(i, i + cut)); i += cut; } } });
+  return new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } });
+}
+
 function week() {
   let d = applyOp(emptyData(), sampleOp(emptyData()));
   const pull = { id: "w-pull", name: "Pull", color: "blue", rest: 120, items: [
@@ -73,18 +95,28 @@ test("the message: the question first, then the workout; the Claude app also get
   assert.ok(forClaudeApp("REPORT").endsWith("REPORT"));
 });
 
-test("asking Claude: the request, the answer, and errors in plain words", async () => {
+test("asking Claude: a streamed request, the answer as it's written, and errors in plain words", async () => {
   let seen = null;
-  const ok = async (url, opts) => { seen = { url, opts }; return { ok: true, status: 200, json: async () => ({ content: [{ type: "text", text: "## Verdict\nGood." }] }) }; };
+  const ok = async (url, opts) => { seen = { url, opts }; return sse("## Verdict\nGood. Ünïcode ✓ too."); };
   const msgs = [{ role: "user", content: "hi" }];
-  assert.equal(await askClaude("sk-ant-x", msgs, { fetchFn: ok }), "## Verdict\nGood.");
+  const texts = [], phases = [];
+  const r = await askClaude("sk-ant-x", msgs, { fetchFn: ok, onText: (t) => texts.push(t), onPhase: (p) => phases.push(p) });
+  assert.equal(r.text, "## Verdict\nGood. Ünïcode ✓ too.");
+  assert.deepEqual(r.content, [{ type: "thinking", thinking: "", signature: "SIG123" }, { type: "text", text: "## Verdict\nGood. Ünïcode ✓ too." }]);
+  assert.ok(texts.length > 3 && texts.at(-1) === r.text, "the text arrives bit by bit");
+  assert.deepEqual(phases, ["thinking", "writing"]);
   assert.equal(seen.url, API_URL);
   assert.equal(seen.opts.headers["x-api-key"], "sk-ant-x");
   assert.equal(seen.opts.headers["anthropic-version"], "2023-06-01");
   assert.equal(seen.opts.headers["anthropic-dangerous-direct-browser-access"], "true");
   const sent = JSON.parse(seen.opts.body);
   assert.equal(sent.model, MODEL);
+  assert.equal(sent.stream, true);
   assert.equal(sent.system, INSTRUCTIONS);
+  assert.deepEqual(sent.output_config, { effort: "medium" });
+  assert.ok(sent.max_tokens >= 8000, "room to think before answering");
+  assert.equal(sent.tools, undefined);
+  assert.equal(sent.tool_choice, undefined);
   assert.deepEqual(sent.messages, msgs);
 
   const fail = (status, message) => async () => ({ ok: false, status, json: async () => ({ error: { message } }) });
@@ -95,6 +127,13 @@ test("asking Claude: the request, the answer, and errors in plain words", async 
   const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
   await assert.rejects(askClaude("k", msgs, { fetchFn: async () => { throw abort; } }), (e) => e === abort);
   assert.equal(errorText(400, { error: { message: "bad" } }), "Claude couldn't answer (400: bad).");
+  // trouble in the middle of the answer
+  await assert.rejects(askClaude("k", msgs, { fetchFn: async () => sse("", { events: [{ type: "message_start", message: {} },
+    { type: "error", error: { type: "overloaded_error", message: "Overloaded" } }] }) }), /busy/);
+  await assert.rejects(askClaude("k", msgs, { fetchFn: async () => sse("Half an ans", { end: false }) }), /connection dropped/);
+  await assert.rejects(askClaude("k", msgs, { fetchFn: async () => sse("", { stop: "refusal" }) }), /didn't answer this one/);
+  const cut = await askClaude("k", msgs, { fetchFn: async () => sse("A long answer", { stop: "max_tokens" }) });
+  assert.equal(cut.text, "A long answer");
 });
 
 test("the answer as blocks: headings, paragraphs, lists, bold", () => {
@@ -115,7 +154,7 @@ test("the answer as blocks: headings, paragraphs, lists, bold", () => {
 // ---------------------------------------------------------------------------
 // Version 1.9: Claude checks the whole week
 // ---------------------------------------------------------------------------
-import { weekReport, planMessage, forClaudeAppPlan, askClaudePlan, planFromText, proposal, planSignature, PLAN_TOOL, PLAN_INSTRUCTIONS } from "../js/coach.js";
+import { weekReport, planMessage, forClaudeAppPlan, askClaudePlan, planFromText, proposal, planSignature, PLAN_SCHEMA, PLAN_INSTRUCTIONS } from "../js/coach.js";
 
 test("the week: every planned workout with its id and its exercises' ids, and the exercise list with ids", () => {
   const d = week();
@@ -192,20 +231,53 @@ test("a pasted answer: the json block at its end", () => {
   assert.equal(planFromText("No plan here"), null);
 });
 
-test("asking for the plan: the tool is required, and its answer comes back", async () => {
+test("asking for the plan: JSON in the plan's shape (no forced tool: Claude Sonnet 5.5 refuses those), and its answer", async () => {
   let sent = null;
-  const fetchFn = async (url, opts) => { sent = JSON.parse(opts.body); return { ok: true, status: 200, json: async () => ({
-    stop_reason: "tool_use", content: [{ type: "tool_use", id: "tu1", name: "propose_plan", input: { verdict: "v", workouts: [] } }] }) }; };
-  const r = await askClaudePlan("k", [{ role: "user", content: "x" }], { fetchFn });
-  assert.equal(r.toolId, "tu1");
-  assert.equal(r.input.verdict, "v");
-  assert.deepEqual(sent.tools, [PLAN_TOOL]);
-  assert.deepEqual(sent.tool_choice, { type: "tool", name: "propose_plan" });
+  const plan = { verdict: "v", notes: "", workouts: [{ id: "w-pull", why: "", rest_seconds: null, items: [] }] };
+  const fetchFn = async (url, opts) => { sent = JSON.parse(opts.body); return sse(JSON.stringify(plan)); };
+  const progress = [];
+  const r = await askClaudePlan("k", [{ role: "user", content: "x" }], { fetchFn, onText: (t) => progress.push(t.length) });
+  assert.deepEqual(r.input, plan);
+  assert.equal(r.content.at(-1).type, "text");
+  assert.equal(r.content[0].signature, "SIG123");
+  assert.ok(progress.length > 3);
+  assert.equal(sent.tools, undefined);
+  assert.equal(sent.tool_choice, undefined);
+  assert.equal(sent.stream, true);
+  assert.deepEqual(sent.output_config, { effort: "medium", format: { type: "json_schema", schema: PLAN_SCHEMA } });
   assert.equal(sent.system, PLAN_INSTRUCTIONS);
-  const cut = async () => ({ ok: true, status: 200, json: async () => ({ stop_reason: "max_tokens", content: [] }) });
-  await assert.rejects(askClaudePlan("k", [], { fetchFn: cut }), /cut off/);
-  const none = async () => ({ ok: true, status: 200, json: async () => ({ stop_reason: "end_turn", content: [{ type: "text", text: "hi" }] }) });
-  await assert.rejects(askClaudePlan("k", [], { fetchFn: none }), /didn't send a plan/);
+  await assert.rejects(askClaudePlan("k", [], { fetchFn: async () => sse('{"verdict": "v", "work', { stop: "max_tokens" }) }), /cut off/);
+  await assert.rejects(askClaudePlan("k", [], { fetchFn: async () => sse("Sorry, no.") }), /didn't send a plan/);
+  // an answer with the JSON in a code block still works
+  const fenced = await askClaudePlan("k", [], { fetchFn: async () => sse("```json\n" + JSON.stringify(plan) + "\n```") });
+  assert.equal(fenced.input.verdict, "v");
+});
+
+test("the plan's shape follows the API's rules for structured outputs", () => {
+  let unions = 0;
+  const walk = (node, path) => {
+    if (Array.isArray(node.type)) unions += 1;
+    for (const bad of ["minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems"]) assert.equal(node[bad], undefined, `${path}: ${bad} isn't supported`);
+    if (node.type === "object") {
+      assert.equal(node.additionalProperties, false, `${path}: additionalProperties must be false`);
+      assert.deepEqual([...node.required].sort(), Object.keys(node.properties).sort(), `${path}: every field required`);
+      for (const [k, v] of Object.entries(node.properties)) walk(v, `${path}.${k}`);
+    }
+    if (node.type === "array") walk(node.items, `${path}[]`);
+  };
+  walk(PLAN_SCHEMA, "plan");
+  assert.ok(unions <= 16, `${unions} union types (the limit is 16)`);
+});
+
+test("Claude's plan with nulls: a weight exercise keeps its reps, a timed one gets its seconds", () => {
+  const d = week();
+  const p = proposal(d, { verdict: "", notes: "", workouts: [{ id: "w-pull", why: "x", rest_seconds: null, items: [
+    { ex: "ex-pull-up", sets: 3, reps: null, reps_max: null, seconds: null, rest_seconds: null, superset_with_next: false },
+    { ex: "ex-plank", sets: 3, reps: null, reps_max: null, seconds: null, rest_seconds: null, superset_with_next: false }] }] });
+  const [pull, plank] = p.changes[0].next.items;
+  assert.equal(pull.reps, 10);                  // from the plan before
+  assert.equal(plank.secs, 60);
+  assert.equal(pull.rest, null);
 });
 
 test("the plan's signature changes with the planned workouts, not with others", () => {

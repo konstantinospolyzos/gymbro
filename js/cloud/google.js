@@ -2,7 +2,7 @@
 // the files this app makes (the drive.file permission). Google's permission lasts about an hour; after
 // that the next tap signs in again (a Google window may flash for a second).
 
-import { AuthError, lsGet, lsSet, lsDel, FILE_NAME } from "./common.js";
+import { AuthError, lsGet, lsSet, lsDel, FILE_NAME, netFetch } from "./common.js";
 import { key, tagKind } from "../profiles.js";
 
 const KEY_TOKEN = key("googleToken");      // each profile signs in on its own
@@ -107,7 +107,7 @@ export class GoogleDrive {
 
   async call(method, url, { body, headers = {}, raw = false } = {}) {
     if (!this.tokenValid()) throw new AuthError("Sign in again");
-    const resp = await fetch(url, { method, body, headers: { Authorization: `Bearer ${this.token}`, ...headers } });
+    const resp = await netFetch(url, { method, body, headers: { Authorization: `Bearer ${this.token}`, ...headers } });
     if (resp.status === 401) { this.token = null; lsDel(KEY_TOKEN); throw new AuthError("Sign in again"); }
     if (resp.status === 404 || resp.status === 204) return null;
     if (!resp.ok) {

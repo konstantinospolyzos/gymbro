@@ -56,7 +56,7 @@ store.chooser = (mine, theirs, label) => alertBox({
   ],
 });
 
-const SYNC_ICONS = { local: "phone", synced: "cloudCheck", syncing: "sync", pending: "cloudUp", signin: "cloudUp", offline: "cloudOff", error: "cloudOff", idle: "cloud" };
+const SYNC_ICONS = { local: "phone", synced: "cloudCheck", syncing: "sync", pending: "cloudUp", signin: "cloudUp", offline: "cloudOff", retry: "cloudOff", error: "cloudOff", idle: "cloud" };
 
 function updateChrome() {
   const me = currentProfile();
@@ -98,7 +98,7 @@ function render() {
   pageTitle.textContent = tab.title;
   statusPill = h("button", { type: "button", class: "status-pill" });
   statusPill.addEventListener("click", () => (store.cloud ? store.syncFromTap().then(() => toast(store.status.text)) : openSettings()));
-  const showPill = current === "today" || ["signin", "error"].includes(store.status.state);
+  const showPill = current === "today" || ["signin", "error", "retry"].includes(store.status.state);
   main.replaceChildren(h("div", { class: "page", dataset: { page: current } },
     h("h1", { class: "large-title" }, tab.title),
     h("div", { class: "subtitle" }, subtitle),
@@ -156,6 +156,9 @@ store.load();
 render();
 if (store.active && store.ready) restoreLive();
 if (store.cloud) store.sync();
+// back in the app (a sync is cut off when the phone puts it away), or the connection is back
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && store.ready) store.syncIfStale(); });
+window.addEventListener("online", () => { if (store.ready) store.syncIfStale(); });
 
 // after midnight: a new day, a new Today
 let day = isoDay(new Date());

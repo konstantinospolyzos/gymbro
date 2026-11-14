@@ -165,8 +165,19 @@ export function firstMessage(report, question = "") {
 /** Everything in one text, for the Claude app (which doesn't get the instructions separately) */
 export const forClaudeApp = (report, question = "") => `${INSTRUCTIONS}\n\n---\n\n${firstMessage(report, question)}`;
 
-/** One request to Claude -> its JSON. Throws an Error with a message to show (or the AbortError). */
-async function callClaude(apiKey, body, { signal, fetchFn = fetch } = {}) {
+/** How hard Claude thinks before answering (Claude Sonnet 5.5 always thinks a little; "medium" keeps it quick) */
+export const EFFORT = "medium";
+
+class ClaudeError extends Error {}
+const DROPPED = "The connection dropped before Claude finished. Keep GymBro open while it answers, and try again.";
+const ERROR_STATUS = { authentication_error: 401, permission_error: 403, rate_limit_error: 429, overloaded_error: 529, api_error: 500, invalid_request_error: 400 };
+
+/**
+ * One request to Claude, streamed: the answer arrives as it's written (and a long think doesn't time out).
+ * onText(textSoFar), onPhase("thinking" | "writing"). -> {text, content, stop}: content is Claude's reply as
+ * sent (its thinking blocks too), to send back as it is in a follow-up.
+ */
+async function streamClaude(apiKey, body, { signal, fetchFn = fetch, onText = null, onPhase = null } = {}) {
   let res;
   try {
     res = await fetchFn(API_URL, {
@@ -174,24 +185,73 @@ async function callClaude(apiKey, body, { signal, fetchFn = fetch } = {}) {
       headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01",
         // the key is the user's own and stays on their phone, so the browser may call the API directly
         "anthropic-dangerous-direct-browser-access": "true" },
-      body: JSON.stringify({ model: MODEL, ...body }),
+      body: JSON.stringify({ model: MODEL, stream: true, ...body }),
     });
   } catch (err) {
     if (err?.name === "AbortError") throw err;
     throw new Error("No connection: Claude needs the internet. Try again when you have a signal.");
   }
-  let json = null;
-  try { json = await res.json(); } catch { /* below */ }
-  if (!res.ok) throw new Error(errorText(res.status, json));
-  return json || {};
+  if (!res.ok) {
+    let json = null;
+    try { json = await res.json(); } catch { /* below */ }
+    throw new Error(errorText(res.status, json));
+  }
+  const blocks = [];
+  let text = "", stop = null, done = false;
+  const handle = (ev) => {
+    if (ev.type === "content_block_start") {
+      blocks[ev.index] = { ...ev.content_block };
+      if (ev.content_block?.type === "text") onPhase?.("writing");
+      else if (/thinking/.test(ev.content_block?.type || "")) onPhase?.("thinking");
+    } else if (ev.type === "content_block_delta") {
+      const b = blocks[ev.index], d = ev.delta || {};
+      if (!b) return;
+      if (d.type === "text_delta") { b.text = (b.text || "") + d.text; text += d.text; onText?.(text); }
+      else if (d.type === "thinking_delta") b.thinking = (b.thinking || "") + (d.thinking || "");
+      else if (d.type === "signature_delta") b.signature = (b.signature || "") + (d.signature || "");
+    } else if (ev.type === "message_delta") {
+      if (ev.delta?.stop_reason) stop = ev.delta.stop_reason;
+    } else if (ev.type === "message_stop") {
+      done = true;
+    } else if (ev.type === "error") {
+      throw new ClaudeError(errorText(ERROR_STATUS[ev.error?.type] || 500, ev));
+    }
+  };
+  try {
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done: end } = await reader.read();
+      if (value) buf += dec.decode(value, { stream: true });
+      let m;
+      while ((m = /\r?\n\r?\n/.exec(buf))) {
+        const chunk = buf.slice(0, m.index);
+        buf = buf.slice(m.index + m[0].length);
+        const data = chunk.split(/\r?\n/).filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trimStart()).join("\n");
+        if (!data) continue;
+        let ev;
+        try { ev = JSON.parse(data); } catch { continue; }
+        handle(ev);
+      }
+      if (end) break;
+    }
+  } catch (err) {
+    if (err?.name === "AbortError" || err instanceof ClaudeError) throw err;
+    throw new Error(DROPPED);
+  }
+  if (!done) throw new Error(DROPPED);
+  // what goes back in a follow-up: the thinking (with its signature) and the text, as Claude sent them
+  const content = blocks.filter((b) => b && ["thinking", "redacted_thinking", "text"].includes(b.type));
+  return { text: text.trim(), content, stop };
 }
 
-/** Ask Claude. messages: [{role, content}] -> the answer's text. */
+/** Ask Claude. messages: [{role, content}] -> {text, content} (content: to send back in a follow-up) */
 export async function askClaude(apiKey, messages, opts = {}) {
-  const body = await callClaude(apiKey, { max_tokens: 1500, system: INSTRUCTIONS, messages }, opts);
-  const text = (body.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n").trim();
-  if (!text) throw new Error("Claude didn't answer. Try again.");
-  return text;
+  const r = await streamClaude(apiKey, { max_tokens: 8000, system: INSTRUCTIONS, messages, output_config: { effort: EFFORT } }, opts);
+  if (r.stop === "refusal") throw new Error("Claude didn't answer this one. Try asking it another way.");
+  if (!r.text) throw new Error(r.stop === "max_tokens" ? "Claude ran out of room before answering. Try again." : "Claude didn't answer. Try again.");
+  return { text: r.text, content: r.content };
 }
 
 /** An API error as something to show */
@@ -271,36 +331,35 @@ Rules:
   time). If a workout is already good, return it exactly as it is, with an empty "why".
 - "why" is one or two short sentences in plain words, for the lifter.`;
 
-const ITEM_SCHEMA = {
-  type: "object",
-  properties: {
-    ex: { type: "string", description: "Exercise id from the app's exercise list, e.g. ex-seated-leg-curl" },
-    sets: { type: "integer", minimum: 1, maximum: 10 },
-    reps: { type: "integer", description: "Reps, or the low end of a rep range (not for timed exercises)" },
-    reps_max: { type: ["integer", "null"], description: "The high end of a rep range, or null for a fixed number" },
-    seconds: { type: ["integer", "null"], description: "Only for timed exercises: seconds per set" },
-    rest_seconds: { type: ["integer", "null"], description: "Rest after each set when different from the workout's, else null" },
-    superset_with_next: { type: "boolean", description: "True to do it in turn with the next exercise" },
-  },
-  required: ["ex", "sets"],
-};
+const intOrNull = (description) => ({ type: ["integer", "null"], description });
 
-/** The tool Claude answers with, so its plan can be checked and applied */
-export const PLAN_TOOL = {
-  name: "propose_plan",
-  description: "Give the improved week: every workout in it, each with its full list of exercises in order.",
-  input_schema: {
-    type: "object",
-    properties: {
-      verdict: { type: "string", description: "One or two sentences on the week overall" },
-      notes: { type: "string", description: "Anything else worth knowing (optional, short; markdown bullets are fine)" },
-      workouts: { type: "array", items: { type: "object", properties: {
+/** The plan's shape: Claude's answer is JSON in exactly this form (structured output), so it can be checked
+ *  and applied. Every field is required (null when it doesn't apply) and no others are allowed. */
+export const PLAN_SCHEMA = {
+  type: "object", additionalProperties: false,
+  required: ["verdict", "notes", "workouts"],
+  properties: {
+    verdict: { type: "string", description: "One or two sentences on the week overall" },
+    notes: { type: "string", description: "Anything else worth knowing, short (markdown bullets are fine), or empty" },
+    workouts: { type: "array", description: "Every workout of the week", items: {
+      type: "object", additionalProperties: false,
+      required: ["id", "why", "rest_seconds", "items"],
+      properties: {
         id: { type: "string", description: "The workout's id, as given" },
-        rest_seconds: { type: ["integer", "null"], description: "The workout's rest between sets, or null to keep it" },
-        why: { type: "string", description: "What changed and why; empty when unchanged" },
-        items: { type: "array", items: ITEM_SCHEMA } }, required: ["id", "why", "items"] } },
-    },
-    required: ["verdict", "workouts"],
+        why: { type: "string", description: "What changed and why, one or two short sentences; empty when unchanged" },
+        rest_seconds: intOrNull("The workout's rest between sets in seconds, or null to keep it"),
+        items: { type: "array", description: "All its exercises, in order", items: {
+          type: "object", additionalProperties: false,
+          required: ["ex", "sets", "reps", "reps_max", "seconds", "rest_seconds", "superset_with_next"],
+          properties: {
+            ex: { type: "string", description: "Exercise id from the app's exercise list, e.g. ex-seated-leg-curl" },
+            sets: { type: "integer", description: "Working sets, 1 to 10" },
+            reps: intOrNull("Reps, or the low end of a rep range; null for timed exercises"),
+            reps_max: intOrNull("The high end of a rep range, or null for a fixed number"),
+            seconds: intOrNull("Seconds per set, only for timed exercises; else null"),
+            rest_seconds: intOrNull("Rest after each set in seconds when different from the workout's, else null"),
+            superset_with_next: { type: "boolean", description: "True to do it in turn with the next exercise" },
+          } } } } } },
   },
 };
 
@@ -352,21 +411,24 @@ export function forClaudeAppPlan(report, question = "") {
 Explain the changes briefly, workout by workout. Then end your answer with the full new week in one
 \`\`\`json code block, which I'll paste back into the app. Use exactly this shape (every workout of the week,
 each with all its exercises in order):
-{"verdict": "...", "workouts": [{"id": "<workout id>", "why": "...", "items": [{"ex": "<exercise id>", "sets": 3, "reps": 8, "reps_max": 12, "rest_seconds": null, "superset_with_next": false}]}]}
+{"verdict": "...", "notes": "", "workouts": [{"id": "<workout id>", "why": "...", "rest_seconds": null, "items": [{"ex": "<exercise id>", "sets": 3, "reps": 8, "reps_max": 12, "seconds": null, "rest_seconds": null, "superset_with_next": false}]}]}
 
 ---
 
 ${planMessage(report, question)}`;
 }
 
-/** Ask Claude for a better week. messages: the conversation so far -> {input, content} (content: Claude's reply as sent) */
+/** Ask Claude for a better week. messages: the conversation so far -> {input, content} (content: Claude's reply
+ *  as sent, for a follow-up). onPhase("thinking" | "writing"), onText(jsonSoFar) show how far it is. */
 export async function askClaudePlan(apiKey, messages, opts = {}) {
-  const body = await callClaude(apiKey, { max_tokens: 6000, system: PLAN_INSTRUCTIONS, messages, tools: [PLAN_TOOL],
-    tool_choice: { type: "tool", name: PLAN_TOOL.name } }, opts);
-  if (body.stop_reason === "max_tokens") throw new Error("Claude's plan got cut off. Try again, or ask for fewer changes.");
-  const use = (body.content || []).find((c) => c.type === "tool_use");
-  if (!use?.input?.workouts) throw new Error("Claude didn't send a plan. Try again.");
-  return { input: use.input, content: body.content, toolId: use.id };
+  const r = await streamClaude(apiKey, { max_tokens: 24000, system: PLAN_INSTRUCTIONS, messages,
+    output_config: { effort: EFFORT, format: { type: "json_schema", schema: PLAN_SCHEMA } } }, opts);
+  if (r.stop === "max_tokens") throw new Error("Claude's plan got cut off. Try again, or ask for fewer changes.");
+  if (r.stop === "refusal") throw new Error("Claude didn't make a plan this time. Try again.");
+  let input = null;
+  try { input = JSON.parse(r.text); } catch { input = planFromText(r.text); }
+  if (!Array.isArray(input?.workouts)) throw new Error("Claude didn't send a plan. Try again.");
+  return { input, content: r.content };
 }
 
 /** Claude's plan from a pasted answer (the ```json block at its end, or the JSON itself) */
@@ -386,7 +448,7 @@ export function planFromText(text) {
 /** A workout's supersets as text: "a+b|c+d" */
 const pairs = (items) => [...new Set(supersets(items).map((g) => (g ? items.slice(g.start, g.end + 1).map((x) => x.ex).join("+") : null)).filter(Boolean))].sort().join("|");
 
-const clampInt = (v, lo, hi) => (Number.isFinite(Number(v)) ? Math.min(hi, Math.max(lo, Math.round(Number(v)))) : null);
+const clampInt = (v, lo, hi) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Math.min(hi, Math.max(lo, Math.round(Number(v)))));
 const itemText = (it, ex) => `${target(it, ex).replace(" reps", "")}${it.rest != null ? `, rest ${fmtRest(it.rest)}` : ""}`;
 
 /**

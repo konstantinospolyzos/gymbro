@@ -6,7 +6,7 @@
 // that code for tokens. Microsoft keeps the app signed in for 24 hours (its limit for web apps); after
 // that the next tap opens the Microsoft window again, which usually closes by itself straight away.
 
-import { AuthError, lsGet, lsSet, lsDel, FILE_NAME, BACKUP_PREFIX } from "./common.js";
+import { AuthError, lsGet, lsSet, lsDel, FILE_NAME, BACKUP_PREFIX, netFetch } from "./common.js";
 import { key } from "../profiles.js";
 
 const LOGIN = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
@@ -193,7 +193,7 @@ export class OneDrive {
   }
 
   async _token(params) {
-    const resp = await fetch(`${LOGIN}/token`, {
+    const resp = await netFetch(`${LOGIN}/token`, {
       method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ client_id: this.clientId, scope: SCOPE, ...params }),
     });
@@ -251,7 +251,7 @@ export class OneDrive {
 
   async call(method, path, { body, headers = {}, raw = false, again = true } = {}) {
     await this.ensureToken();
-    const resp = await fetch(path.startsWith("https:") ? path : `${GRAPH}${path}`, { method, body, headers: { Authorization: `Bearer ${this.access}`, ...headers } });
+    const resp = await netFetch(path.startsWith("https:") ? path : `${GRAPH}${path}`, { method, body, headers: { Authorization: `Bearer ${this.access}`, ...headers } });
     if (resp.status === 401) {
       this.access = null; this.expiry = 0; this._store();
       if (again && this.canRefresh()) return this.call(method, path, { body, headers, raw, again: false });
@@ -291,7 +291,7 @@ export class OneDrive {
     const item = await this.call("GET", `${this._path(id)}?$select=id,@microsoft.graph.downloadUrl`);
     const url = item?.["@microsoft.graph.downloadUrl"];
     if (!url) return null;
-    const resp = await fetch(url);
+    const resp = await netFetch(url);
     if (!resp.ok) throw new Error(`OneDrive answered ${resp.status}`);
     return JSON.parse(await resp.text());
   }

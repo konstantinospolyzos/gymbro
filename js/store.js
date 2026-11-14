@@ -10,7 +10,7 @@ import { CONFIG } from "./config.js";
 import { emptyData, normalize, applyOp, describeData, hasContent } from "./data.js";
 import { OneDrive } from "./cloud/onedrive.js";
 import { GoogleDrive } from "./cloud/google.js";
-import { AuthError, lsGet, lsSet, lsDel, backupName } from "./cloud/common.js";
+import { AuthError, NetworkError, lsGet, lsSet, lsDel, backupName } from "./cloud/common.js";
 import { key } from "./profiles.js";
 
 // each profile keeps its own (the first profile under the original names)
@@ -209,6 +209,7 @@ class Store {
     this.emit("status");
     const sending = this.meta.pending.length;
     const before = JSON.stringify(this.data);
+    let step = "checking your account";
     try {
       if (!this.meta.email) {
         const me = await cloud.about();
@@ -216,16 +217,20 @@ class Store {
         this.meta.name = me?.name || null;
         if (this.meta.email) cloud.setHint(this.meta.email);
       }
+      step = "checking the file";
       let remote = this.meta.fileId ? await cloud.getMeta(this.meta.fileId) : null;
+      step = "finding the file";
       if (!remote) remote = await cloud.find();
       let result;
       if (!remote) {
         // No file in the cloud yet: this device's data becomes the cloud file
         const start = this.data || emptyData();
         const stamped = { ...start, updated: new Date().toISOString() };
+        step = "making the file";
         result = { data: stamped, meta: await cloud.create(stamped) };
         this.meta.pending = this.meta.pending.slice(sending);
       } else if (this.meta.adopting) {
+        step = "reading the file";
         const theirs = normalize(await cloud.download(remote.id));
         const mine = this.data;
         let keep = "cloud";
@@ -233,6 +238,7 @@ class Store {
         else if (hasContent(mine) && !hasContent(theirs)) keep = "device";
         if (keep === "device") {
           const stamped = { ...mine, updated: new Date().toISOString() };
+          step = "saving the file";
           result = { data: stamped, meta: await cloud.upload(remote.id, stamped) };
         } else {
           result = { data: theirs, meta: remote };
@@ -240,11 +246,13 @@ class Store {
         this.meta.pending = [];
       } else {
         const changedElsewhere = remote.id !== this.meta.fileId || String(remote.version) !== String(this.meta.version);
+        step = "reading the file";
         const base = !changedElsewhere && this.base ? this.base : normalize(await cloud.download(remote.id));
         const ops = this.meta.pending.slice(0, sending);
         let merged = ops.reduce(applyOp, base);
         if (ops.length) {
           merged = { ...merged, updated: new Date().toISOString() };
+          step = "saving the file";
           result = { data: merged, meta: await cloud.upload(remote.id, merged) };
         } else {
           result = { data: merged, meta: remote };
@@ -260,18 +268,37 @@ class Store {
       this.meta.version = result.meta.version;
       this.meta.link = result.meta.link || this.meta.link;
       this.meta.lastSync = Date.now();
+      this.meta.problem = null;
+      this._retryIn = 0;
       this.persist();
       this._status();
       if (later.length) this._again = true;
       this._backupIfDue(result.data);
     } catch (err) {
       if (err instanceof AuthError) this._status();
-      else this._status("error", err.message || `Couldn't reach ${cloud.label}.`);
+      else {
+        // what went wrong and where, for Settings (and for fixing it)
+        this.meta.problem = { at: Date.now(), step, text: err.message || "unknown" };
+        lsSet(KEY_META, this.meta);
+        if (err instanceof NetworkError) {
+          // no connection or a dropped one: your changes wait on the phone and it tries again by itself
+          this._status("retry", `Couldn't reach ${cloud.label} · trying again`);
+          this._retryIn = Math.min((this._retryIn || 7500) * 2, 300000);
+        } else this._status("error", err.message || `Couldn't reach ${cloud.label}.`);
+      }
     } finally {
       this._syncing = false;
       this.emit(JSON.stringify(this.data) === before ? "status" : "data");
       if (this._again) { this._again = false; this.syncSoon(300); }
+      else if (this.status.state === "retry") this.syncSoon(this._retryIn);
     }
+  }
+
+  /** Back in the app, or the connection is back: sync if something waits, went wrong, or it's been a while */
+  syncIfStale() {
+    if (!this.cloud || this._syncing) return;
+    const m = this.meta;
+    if (m.pending?.length || ["retry", "error"].includes(this.status.state) || Date.now() - (m.lastSync || 0) > 60000) this.sync();
   }
 
   /** Once a week, keep a copy of the cloud file next to it. Best effort: never blocks or breaks a sync. */

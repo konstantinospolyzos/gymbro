@@ -73,6 +73,26 @@ async function toClaudeApp(text) {
   if (ok) window.open("https://claude.ai/new", "_blank", "noopener");
 }
 
+/** Claude at work: what it's doing, then its answer as it's written (redrawn at most once a frame) */
+function liveCard(first) {
+  const status = h("span", null, first);
+  const head = h("div", { class: "coach-wait" }, icon("sparkle", 20, "coach-spin"), status);
+  const out = h("div");
+  const el = h("div", { class: "card coach-live" }, head, out);
+  let pending = null;
+  return {
+    el,
+    phase(text) { status.textContent = text; },
+    text(t) {
+      const first = pending === null;
+      pending = t;
+      // a **bold** still being written: without its opening stars until it's closed
+      const tidy = (x) => ((x.match(/\*\*/g) || []).length % 2 ? x.replace(/\*\*(?![\s\S]*\*\*)/, "") : x);
+      if (first) requestAnimationFrame(() => { out.replaceChildren(answerView(tidy(pending))); head.classList.add("small"); pending = null; });
+    },
+  };
+}
+
 /**
  * Ask Claude about a workout.
  * id: where its answers are kept ("w:<workout>" or "s:<session>"); title: what it's about;
@@ -80,9 +100,10 @@ async function toClaudeApp(text) {
  */
 export function openCoach({ id, title, report }) {
   const body = h("div", { class: "form coach" });
-  let thread = loadThread(id);          // {at, msgs: [{role, content, show}]}
+  let thread = loadThread(id);          // {at, msgs: [{role, content, show (your words), text (Claude's answer)}]}
   let busy = null;                      // the question being asked (an AbortController)
   let error = "";
+  let live = null;                      // Claude's answer while it's being written
 
   const question = h("textarea", { class: "note-input coach-input", rows: 2, maxlength: 1000 });
   const send = async () => {
@@ -94,10 +115,12 @@ export function openCoach({ id, title, report }) {
       : [{ role: "user", content: firstMessage(report(), q), show: q }];
     busy = new AbortController();
     error = "";
+    live = liveCard("Claude is looking at your workout…");
     draw(msgs);
     try {
-      const answer = await askClaude(k, msgs.map(({ role, content }) => ({ role, content })), { signal: busy.signal });
-      thread = { at: Date.now(), msgs: [...msgs, { role: "assistant", content: answer }] };
+      const r = await askClaude(k, msgs.map(({ role, content }) => ({ role, content })), { signal: busy.signal,
+        onPhase: (ph) => live.phase(ph === "thinking" ? "Claude is thinking…" : "Claude is writing…"), onText: (t) => live.text(t) });
+      thread = { at: Date.now(), msgs: [...msgs, { role: "assistant", content: r.content, text: r.text }] };
       saveThread(id, thread);
       question.value = "";
     } catch (err) {
@@ -105,6 +128,7 @@ export function openCoach({ id, title, report }) {
       error = err.message;
     }
     busy = null;
+    live = null;
     draw();
   };
 
@@ -119,11 +143,11 @@ export function openCoach({ id, title, report }) {
     } else {
       if (thread && !pending) parts.push(h("div", { class: "caption coach-when" }, `Feedback from ${shortDate(new Date(thread.at))}`));
       msgs.forEach((m) => {
-        if (m.role === "assistant") parts.push(h("div", { class: "card" }, answerView(m.content)));
+        if (m.role === "assistant") parts.push(h("div", { class: "card" }, answerView(m.text ?? (typeof m.content === "string" ? m.content : ""))));
         else if (m.show) parts.push(h("div", { class: "coach-q" }, m.show));
       });
     }
-    if (busy) parts.push(h("div", { class: "card coach-wait" }, icon("sparkle", 20, "coach-spin"), "Claude is looking at your workout…"));
+    if (busy && live) parts.push(live.el);
     if (error) parts.push(h("div", { class: "card coach-error" }, error));
 
     if (k) {
@@ -140,7 +164,8 @@ export function openCoach({ id, title, report }) {
         group(actionRow("sparkle", "Get the answer here in GymBro", async () => { if (await editApiKey()) draw(); },
           { detail: "With an Anthropic API key: a few cents an answer" })));
     }
-    parts.push(group(actionRow("doc", "What Claude sees", () => showReport(thread?.msgs[0]?.content || firstMessage(report(), question.value))),
+    const first = thread?.msgs[0]?.content;
+    parts.push(group(actionRow("doc", "What Claude sees", () => showReport(typeof first === "string" ? first : firstMessage(report(), question.value))),
       thread && !busy ? actionRow("trash", "Start over", () => { thread = null; saveThread(id, null); error = ""; draw(); }, { tone: "danger" }) : null));
     body.replaceChildren(...parts.filter(Boolean));
   }
@@ -183,11 +208,13 @@ function changeCard(ch, on, onToggle, done) {
 /** Ask Claude to check the whole week, then apply the changes you want */
 export function openPlanCoach() {
   const body = h("div", { class: "form coach" });
-  let saved = lsGet(planKey(), null);    // {at, sig, msgs, toolId, asked, prop, applied}
+  let saved = lsGet(planKey(), null);    // {at, sig, msgs, asked, prop, applied}
   let picked = new Set(saved?.prop?.changes.map((c) => c.old.id) || []);
-  let busy = null, error = "";
+  let busy = null, error = "", progress = null;
   const question = h("textarea", { class: "note-input coach-input", rows: 2, maxlength: 1000 });
   const keep = (v) => { saved = v; if (v) lsSet(planKey(), v); else lsDel(planKey()); };
+  // a follow-up continues the conversation: only while its plan still fits yours (and not from version 1.9's)
+  const canFollow = () => Boolean(saved?.prop && saved.msgs?.length && !saved.toolId && !saved.applied && planSignature(store.data) === saved.sig);
   const got = (input, extra) => {
     const prop = proposal(store.data, input);
     keep({ at: Date.now(), sig: planSignature(store.data), prop, applied: null, ...extra });
@@ -198,16 +225,22 @@ export function openPlanCoach() {
   const send = async () => {
     const k = apiKey();
     const q = question.value.trim();
-    const follow = saved?.msgs?.length && saved.toolId && !saved.applied;
+    const follow = canFollow();
     if (follow && !q) { question.focus(); return; }
     const msgs = follow
-      ? [...saved.msgs, { role: "user", content: [{ type: "tool_result", tool_use_id: saved.toolId, content: "Shown to the lifter. Nothing applied yet." }, { type: "text", text: q }] }]
+      ? [...saved.msgs, { role: "user", content: `${q}\n\n(Your plan was shown to me; nothing is applied yet. Send the whole week again with the changes.)` }]
       : [{ role: "user", content: planMessage(weekReport(store.data), q) }];
     busy = new AbortController(); error = "";
+    // how far it is: the plan's JSON is about this long
+    const items = Object.values(store.data.schedule).map((id) => store.data.workouts.find((w) => w.id === id)).filter(Boolean);
+    const expect = [...new Set(items)].reduce((a, w) => a + 190 + w.items.length * 130, 300);
+    progress = h("span", null, "Claude is checking your week…");
     draw();
     try {
-      const r = await askClaudePlan(k, msgs, { signal: busy.signal });
-      got(r.input, { msgs: [...msgs, { role: "assistant", content: r.content }], toolId: r.toolId, asked: [...(follow ? saved.asked || [] : []), q].filter(Boolean) });
+      const r = await askClaudePlan(k, msgs, { signal: busy.signal,
+        onPhase: (ph) => { progress.textContent = ph === "thinking" ? "Claude is thinking about your week…" : "Writing the plan…"; },
+        onText: (t) => { progress.textContent = `Writing the plan… ${Math.min(99, Math.round((100 * t.length) / expect))}%`; } });
+      got(r.input, { msgs: [...msgs, { role: "assistant", content: r.content }], asked: [...(follow ? saved.asked || [] : []), q].filter(Boolean) });
     } catch (err) {
       if (err?.name === "AbortError") return;
       error = err.message;
@@ -276,10 +309,11 @@ export function openPlanCoach() {
           footer("Your days stay as they are, and each exercise you keep starts from your last weights. You can undo this."));
       }
     }
-    if (busy) parts.push(h("div", { class: "card coach-wait" }, icon("sparkle", 20, "coach-spin"), "Claude is checking your week… (up to a minute)"));
+    if (busy) parts.push(h("div", { class: "card coach-wait" }, icon("sparkle", 20, "coach-spin"), progress),
+      footer("This takes a minute or two. Keep GymBro open until it's done."));
     if (error) parts.push(h("div", { class: "card coach-error" }, error));
 
-    const follow = p && saved.msgs?.length && !saved.applied && planSignature(store.data) === saved.sig;
+    const follow = canFollow();
     if (k) {
       question.placeholder = follow ? "Ask for something different… For example: keep the walking lunges" : "Anything Claude should know? (optional) For example: 75 minutes at most, sore knee";
       parts.push(h("div", { class: "group" }, question),
@@ -292,7 +326,7 @@ export function openPlanCoach() {
           icon("upload", 18), "Open in the Claude app"),
         footer("Claude answers in its app and ends with the new plan in a code block. Copy its whole answer, come back, and paste it here to see the changes."),
         group(actionRow("doc", "Paste Claude's answer", paste, { detail: "Review the changes, then choose what to use" }),
-          actionRow("sparkle", "Get the plan here in GymBro", async () => { if (await editApiKey()) draw(); }, { detail: "With an Anthropic API key: a few cents each time" })));
+          actionRow("sparkle", "Get the plan here in GymBro", async () => { if (await editApiKey()) draw(); }, { detail: "With an Anthropic API key: usually under 10 cents each time" })));
     }
     parts.push(group(actionRow("doc", "What Claude sees", () => showReport(planMessage(weekReport(store.data), question.value))),
       p && !busy ? actionRow("trash", "Start over", () => { keep(null); error = ""; draw(); }, { tone: "danger" }) : null));

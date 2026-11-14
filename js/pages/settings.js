@@ -82,6 +82,8 @@ export function openSettings() {
         infoRow(cloud.label, m.email || m.name || "signed in"),
         infoRow("File", cloud.where),
         infoRow("Status", store.status.text || "—"),
+        m.problem && ["error", "retry"].includes(store.status.state)
+          ? infoRow("What went wrong", `${new Date(m.problem.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${m.problem.step}: ${m.problem.text}`) : null,
         actionRow("sync", "Sync now", () => store.syncFromTap().then(() => toast(store.status.text))),
         m.link ? actionRow("link", `Open the file in ${cloud.label}`, () => window.open(m.link, "_blank", "noopener")) : null));
       parts.push(footer(`Your workouts and plan are one file in your own ${cloud.label}, the same on every phone or computer signed in with your account. The app can only see its own files.`));
