@@ -1,13 +1,13 @@
 // Editing the plan: a workout (name, colour, days, rest, exercises), one exercise in it (sets, reps,
 // weight, its own rest), choosing exercises from the library, and the library itself.
 
-import { h, icon, sheet, group, caption, footer, alertBox, toast, segmented, stepper, selectOnFocus, tile, initials, switchRow } from "../ui.js";
+import { h, icon, sheet, group, caption, footer, alertBox, toast, segmented, stepper, selectOnFocus, tile, initials, switchRow, actionRow } from "../ui.js";
 import { store } from "../store.js";
 import { uid, MUSCLES, COLORS, KIND_LABELS, exerciseMap } from "../data.js";
-import { WEEKDAYS, WEEK_ORDER, fmtRest, fmtKg, kg, parseNum, timeUnit, fmtSecs, repRange, barOf, supersets, linkNext } from "../core.js";
+import { WEEKDAYS, WEEK_ORDER, fmtRest, fmtKg, kg, parseNum, timeUnit, fmtSecs, repRange, barOf, supersets, linkNext, alternatives, lastFor, relDay } from "../core.js";
 import { TIPS } from "../library.js";
 import { openRecommended } from "./recommend.js";
-import { NO, chooseRest } from "./common.js";
+import { NO, chooseRest, setsLine } from "./common.js";
 
 const KIND_ORDER = ["weight", "reps", "time"];
 const STEPS = [0.5, 1, 1.25, 2, 2.5, 5, 10];
@@ -182,7 +182,30 @@ export function openLibrary() {
 // ---------------------------------------------------------------------------
 // One exercise in a workout
 // ---------------------------------------------------------------------------
-function openItemEditor(item, workoutRest, { onSave, onRemove, onMove, canUp, canDown, nextName = null, linked = false, onLink = null }) {
+/** Another exercise instead of one: the same movement first, then the same muscle group, then any (with
+ *  search). Used in a workout (only for today) and in the plan (from now on). */
+export function openSwapPicker({ exId, exclude = [], dark = false, intro = "", onPick }) {
+  const data = store.data, ex = exerciseMap(data).get(exId), name = ex?.name || "this exercise";
+  const { similar, same } = alternatives(data, exId, exclude);
+  let api = null;
+  const row = (o) => {
+    const last = lastFor(data, o.id);
+    return h("button", { type: "button", class: "pick-row", onclick: () => { api.close(); onPick(o.id); } },
+      h("span", { class: "pick-name" }, o.name, h("div", { class: "pick-kind" }, last ? `Last: ${setsLine(data, last.entry)} · ${relDay(last.session.date)}` : "Not done yet")),
+      icon("chevron", 15, "chev"));
+  };
+  const body = h("div", { class: "form" },
+    intro ? h("div", { class: "info-text", style: { padding: "8px 4px 0" } }, h("p", null, intro)) : null,
+    similar.length ? [caption("Similar"), h("div", { class: "group" }, similar.map(row))] : null,
+    same.length ? [caption(ex?.muscle ? `Other ${ex.muscle.toLowerCase()} exercises` : "Other exercises"), h("div", { class: "group" }, same.map(row))] : null,
+    group(actionRow("search", "Another exercise", () => {
+      api.close();
+      openExercisePicker({ title: `Instead of ${name}`, multi: false, dark, exclude, onDone: ([id]) => { if (id) onPick(id); } });
+    })));
+  api = sheet({ title: `Swap ${name}`, left: { text: "Cancel" }, body, className: dark ? "dark-scope" : "" });
+}
+
+function openItemEditor(item, workoutRest, { onSave, onRemove, onMove, onSwap = null, canUp, canDown, nextName = null, linked = false, onLink = null }) {
   const ex = exerciseMap(store.data).get(item.ex);
   const kind = ex?.kind || "weight", unit = timeUnit(ex);
   const it = { ...item };
@@ -218,6 +241,8 @@ function openItemEditor(item, workoutRest, { onSave, onRemove, onMove, canUp, ca
     showRest();
   } }, h("span", { class: "action-text" }, "Rest"), restValue, icon("chevron", 15, "chev"));
   body.append(
+    ...(onSwap ? [group(h("button", { type: "button", class: "action-row", onclick: () => { api.close(); onSwap(it); } },
+      icon("sync", 20, "row-icon"), h("span", { class: "action-text" }, "Swap for another exercise"), icon("chevron", 15, "chev")))] : []),
     caption("Target"), group(rows),
     footer(kind === "time" ? "" : "Up to: the top of a rep range (8–12). When every set reaches it, the workout tells you to add weight. The weight is only a starting point: each set starts from what you lifted last time."),
     caption("Rest"), group(restRow),
@@ -290,6 +315,23 @@ export function openWorkoutEditor(workout = null) {
         nextName: next ? next.name : null, linked: Boolean(ss[i] && i < ss[i].end),
         onLink: (on) => { linkNext(w.items, i, on); drawItems(); },
         onSave: (n) => { w.items[i] = keepGroup(i, n); drawItems(); },
+        // another exercise in its place: the same sets, reps, rest and superset (its own weights from last time)
+        onSwap: (n) => {
+          w.items[i] = keepGroup(i, n);
+          drawItems();
+          openSwapPicker({ exId: n.ex, exclude: w.items.map((x) => x.ex),
+            intro: "It takes this one's place in the workout, with the same sets, reps and rest. Each set starts from what you lifted on it last time.",
+            onPick: (id) => {
+              const all = exerciseMap(store.data), was = all.get(n.ex), nx = all.get(id);
+              const item = keepGroup(i, { ...w.items[i], ex: id, w: null });
+              const toTime = nx?.kind === "time", fromTime = was?.kind === "time";
+              if (toTime && !fromTime) { item.secs = timeUnit(nx) === "min" ? 1200 : 60; item.reps = null; item.hi = null; }
+              else if (fromTime && !toTime) { item.reps = 10; item.hi = null; item.secs = null; }
+              w.items[i] = item;
+              drawItems();
+              toast(`${nx?.name || "Swapped"} instead of ${was?.name || "the old one"}`);
+            } });
+        },
         onRemove: () => { w.items.splice(i, 1); drawItems(); },
         onMove: (by, n) => { w.items[i] = keepGroup(i, n); const [x] = w.items.splice(i, 1); w.items.splice(i + by, 0, x); drawItems(); },
       }) },

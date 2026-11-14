@@ -5,7 +5,7 @@
 // js/config.js is the exception: it's yours to edit, so a change there is picked up on the next start.
 // OneDrive, Google Drive and the sign-ins always go to the network.
 // The Savings Tracker and Glosor live on the same website, so only this app's own caches are touched here.
-const VERSION = "1.6";            // the same as APP_VERSION in js/core.js (a test checks): new version, new files
+const VERSION = "1.7";            // the same as APP_VERSION in js/core.js (a test checks): new version, new files
 const PREFIX = "gymbro-";
 const CACHE = `${PREFIX}${VERSION}`;
 const CONFIG = "js/config.js";

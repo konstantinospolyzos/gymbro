@@ -3,18 +3,18 @@
 // seconds so you're ready for the next set. Pull it down to look at the rest of the app; the workout
 // keeps running in the bar above the tabs.
 
-import { h, s, icon, alertBox, actionSheet, toast, askText, selectOnFocus, darkStatusBar, sheet, group, caption, actionRow } from "../ui.js";
+import { h, s, icon, alertBox, actionSheet, toast, askText, selectOnFocus, darkStatusBar } from "../ui.js";
 import { store } from "../store.js";
 import { exerciseMap } from "../data.js";
 import { clock, fmtKg, kg, fmtRest, parseNum, parseSecs, setShort, setText, timeUnit, fmtSecs, relDay, timeOfDay, plural,
-  supersets, linkNext, unlink, alternatives, barOf, platesText, lastFor } from "../core.js";
+  supersets, linkNext, unlink, barOf, platesText } from "../core.js";
 import { TIPS, videoUrl } from "../library.js";
 import { startActive, completeSet, uncompleteSet, current, addRest, skipRest, restLeft, tick, counts, toSession, addSet, removeSet,
   addExercise, removeExercise, moveExercise, lastDoneAt, noteFor, setNote, notesChanged, notesToSave,
   addWarmups, removeWarmups, warmCount, workIndex, swapExercise, retargetRest } from "../workout.js";
 import { unlock, scheduleCountdown, cancelCountdown, keepAwake, haptic, playFinish } from "../sound.js";
-import { NO, chooseRest, setsLine } from "./common.js";
-import { openExercisePicker } from "./editors.js";
+import { NO, chooseRest } from "./common.js";
+import { openExercisePicker, openSwapPicker } from "./editors.js";
 import { showSummary } from "./summary.js";
 
 let root = null, mini = null, timer = null;
@@ -582,35 +582,18 @@ async function exerciseMenu(e) {
 function openSwap(e) {
   const a = A(), x = a.exercises[e];
   if (!x) return;
-  const data = store.data, ex = exerciseMap(data).get(x.ex), name = ex?.name || x.name;
-  const inWorkout = a.exercises.map((b) => b.ex);
-  const { similar, same } = alternatives(data, x.ex, inWorkout);
-  let api = null;
-  const swap = (id) => {
-    if (!A()) return;
-    const at = swapExercise(A(), store.data, e, id, Date.now());
-    save();
-    render();
-    toast(`${exerciseMap(store.data).get(id)?.name || "Swapped"} instead, for today`);
-    els.list.querySelector(`.ex-card[data-e="${at}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" });
-  };
-  const row = (o) => {
-    const last = lastFor(data, o.id);
-    return h("button", { type: "button", class: "pick-row", onclick: () => { api.close(); swap(o.id); } },
-      h("span", { class: "pick-name" }, o.name, h("div", { class: "pick-kind" }, last ? `Last: ${setsLine(data, last.entry)} · ${relDay(last.session.date)}` : "Not done yet")),
-      icon("chevron", 15, "chev"));
-  };
+  const name = exerciseMap(store.data).get(x.ex)?.name || x.name;
   const done = x.sets.some((st) => st.done);
-  const body = h("div", { class: "form" },
-    h("div", { class: "info-text", style: { padding: "8px 4px 0" } },
-      h("p", null, `The sets still to do go to the one you pick${done ? `; the sets done stay with ${name}` : ""}. Only for today: your plan stays the same.`)),
-    similar.length ? [caption("Similar"), h("div", { class: "group" }, similar.map(row))] : null,
-    same.length ? [caption(ex?.muscle ? `Other ${ex.muscle.toLowerCase()} exercises` : "Other exercises"), h("div", { class: "group" }, same.map(row))] : null,
-    group(actionRow("search", "Another exercise", () => {
-      api.close();
-      openExercisePicker({ title: `Instead of ${name}`, multi: false, dark: true, exclude: inWorkout, onDone: ([id]) => { if (id) swap(id); } });
-    })));
-  api = sheet({ title: `Swap ${name}`, left: { text: "Cancel" }, body, className: "dark-scope" });
+  openSwapPicker({ exId: x.ex, exclude: a.exercises.map((b) => b.ex), dark: true,
+    intro: `The sets still to do go to the one you pick${done ? `; the sets done stay with ${name}` : ""}. Only for today: your plan stays the same.`,
+    onPick: (id) => {
+      if (!A()) return;
+      const at = swapExercise(A(), store.data, e, id, Date.now());
+      save();
+      render();
+      toast(`${exerciseMap(store.data).get(id)?.name || "Swapped"} instead, for today`);
+      els.list.querySelector(`.ex-card[data-e="${at}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    } });
 }
 
 function addExercises() {
