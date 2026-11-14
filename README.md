@@ -18,7 +18,9 @@ Your gym week on your phone, in the same iOS look as the Savings Tracker and Glo
 - **Progress:** workouts a week and your streak, volume and time per week, hard sets per muscle this week against
   10–20, body weight, records, lifts that stopped going up (and what helps), and each exercise's best set over time
 - **Ask Claude:** feedback on a workout in your plan (with your whole week and the last times) or on one you just
-  did: in the Claude app, or right in GymBro with your own Anthropic API key (Settings › Claude)
+  did, or on your whole week (Plan › Ask Claude to check my week: Claude proposes better exercises, order and sets,
+  and you see each workout's changes and choose what to use, with undo): in the Claude app, or right in GymBro with
+  your own Anthropic API key (Settings › Claude)
 - **Export:** every set, or your body weight, as CSV for Excel or Python
 - **Profiles:** more than one person on a phone, each with their own plan, workouts, body weight and settings, and
   their own OneDrive or Google Drive sign-in (the first profile keeps `gymbro.json`; Anna's is `gymbro-anna.json`)

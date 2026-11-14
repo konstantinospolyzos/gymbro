@@ -808,3 +808,20 @@ body.has-mini #update-bar { bottom: calc(var(--tab-h) + var(--safe-b) + 80px); }
 .coach-report { margin: 0; padding: 12px 16px; font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
 .sum-claude { margin: 4px 0 12px; }
 .form.coach { gap: 12px; }
+
+/* Check my week: each workout's changes */
+.plan-change { transition: opacity 0.2s; }
+.plan-change.off .plan-items, .plan-change.off .plan-why, .plan-change.off .plan-out { opacity: 0.4; }
+.plan-change-head { display: flex; align-items: center; gap: 12px; }
+.plan-change-sub { font-size: 14px; margin-top: 2px; }
+.plan-why { margin: 10px 0 0; font-size: 15.5px; line-height: 1.4; }
+.plan-items { margin: 12px 0 0; padding-left: 22px; }
+.plan-items li { padding: 4px 0; }
+.plan-items li::marker { color: var(--gray); font-variant-numeric: tabular-nums; }
+.plan-item-name { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.plan-item-sub { display: block; font-size: 14px; color: var(--gray); }
+.plan-was { color: var(--orange); }
+.plan-out { margin-top: 8px; font-size: 14.5px; color: var(--red); }
+.plan-use { margin: 12px -16px -16px; border-radius: 0 0 16px 16px; background: transparent; box-shadow: inset 0 0.5px 0 var(--sep); }
+.plan-done { display: flex; align-items: center; gap: 10px; color: var(--green); font-weight: 600; }
+.plan-done .btn { margin-left: auto; }

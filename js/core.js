@@ -4,7 +4,7 @@
 import { exerciseMap, bySessionStart, uid, DEFAULT_SETTINGS } from "./data.js";
 import { PATTERN, BARBELL, VOLUME, VOLUME_MUSCLES } from "./library.js";
 
-export const APP_VERSION = "1.8";
+export const APP_VERSION = "1.9";
 
 // ---------------------------------------------------------------------------
 // Dates (local time; a workout's "date" is the day it started)

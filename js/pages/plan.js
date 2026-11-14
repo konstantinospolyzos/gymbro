@@ -6,6 +6,7 @@ import { WEEKDAYS, WEEK_ORDER, plannedDays, today } from "../core.js";
 import { workoutTile, workoutLine, emptyState } from "./common.js";
 import { openWorkoutEditor, openLibrary } from "./editors.js";
 import { openRecommended, openWeekRecommender } from "./recommend.js";
+import { openPlanCoach } from "./coach.js";
 
 async function pickForDay(day) {
   const data = store.data;
@@ -59,6 +60,9 @@ export function renderPlan() {
 
   return [subtitle,
     caption("Week"), week, footer("Tap a day to choose its workout. Today's workout is on the Today tab, ready to start."),
+    n ? group(h("button", { type: "button", class: "action-row", onclick: () => openPlanCoach() }, icon("sparkle", 20, "row-icon"),
+      h("span", { class: "action-text" }, "Ask Claude to check my week", h("span", { class: "action-detail" }, "Better exercises, order and sets: you choose what changes")),
+      icon("chevron", 15, "chev"))) : null,
     caption("Workouts", h("button", { type: "button", class: "link-btn", onclick: () => openWorkoutEditor(null) }, "New")), workouts,
     caption("Recommended"), group(
       h("button", { type: "button", class: "action-row", onclick: () => openRecommended() }, icon("sparkle", 20, "row-icon"),

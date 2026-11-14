@@ -111,3 +111,108 @@ test("the answer as blocks: headings, paragraphs, lists, bold", () => {
   assert.deepEqual(inline("Done *now* `x`."), [{ text: "Done now x." }]);
   assert.deepEqual(inline("3 * 4 sets"), [{ text: "3 * 4 sets" }]);
 });
+
+// ---------------------------------------------------------------------------
+// Version 1.9: Claude checks the whole week
+// ---------------------------------------------------------------------------
+import { weekReport, planMessage, forClaudeAppPlan, askClaudePlan, planFromText, proposal, planSignature, PLAN_TOOL, PLAN_INSTRUCTIONS } from "../js/coach.js";
+
+test("the week: every planned workout with its id and its exercises' ids, and the exercise list with ids", () => {
+  const d = week();
+  const r = plain(weekReport(d, NOW));
+  assert.match(r, /^MY WEEK: Mon: Back · Tue: Chest · Wed: Pull · Thu: Shoulders · Fri: Arms · Sat: rest · Sun: rest\./);
+  assert.match(r, /PULL \[id w-pull\], on Wednesday\. Rest between sets: 2 min\. 11 sets\.\n1\. Pull-up \[ex-pull-up\] \(body weight[^)]*\): 3 × 10 reps/);
+  assert.match(r, /2\. Lat pulldown \[ex-lat-pulldown\]: 4 × 8–12 reps, rest 1:30, superset A\n {3}Last times: Wed 11 Nov: 62\.5×12/);
+  assert.match(r, /THE APP'S EXERCISE LIST \(name \[id\]\):\n(.|\n)*Seated leg curl \[ex-seated-leg-curl\]/);
+  assert.match(r, /Plank \[ex-plank\] \(timed\)/);
+  assert.doesNotMatch(r, /undefined|NaN|null/);
+  assert.match(planMessage("R", "bad knee"), /What you should know: bad knee\n\nR$/);
+  const app = forClaudeAppPlan("R");
+  assert.ok(app.startsWith(PLAN_INSTRUCTIONS) && app.includes("```json") && app.endsWith("R"));
+});
+
+test("Claude's plan: checked against the app, weights kept, the changes per workout", () => {
+  const d = week();
+  const p = proposal(d, { verdict: "Good week.", workouts: [
+    { id: "w-pull", why: "Rows first, curls added.", rest_seconds: null, items: [
+      { ex: "ex-seated-cable-row", sets: 4, reps: 10, reps_max: 12, rest_seconds: 90, superset_with_next: false },
+      { ex: "ex-lat-pulldown", sets: 4, reps: 8, reps_max: 12, rest_seconds: 90 },
+      { ex: "Incline dumbbell curl", sets: 3, reps: 8, reps_max: 12, superset_with_next: true },
+      { ex: "ex-hammer-curl", sets: 3, reps: 10, reps_max: 8 },
+      { ex: "ex-made-up", sets: 3 },
+      { ex: "ex-lat-pulldown", sets: 9 }] },
+    { id: "w-nope", why: "", items: [] },
+  ] });
+  assert.equal(p.verdict, "Good week.");
+  assert.deepEqual(p.skipped, ["ex-made-up", "w-nope"]);
+  assert.equal(p.changes.length, 1);
+  const c = p.changes[0];
+  assert.equal(c.why, "Rows first, curls added.");
+  assert.deepEqual(c.next.items.map((x) => x.ex), ["ex-seated-cable-row", "ex-lat-pulldown", "ex-incline-dumbbell-curl", "ex-hammer-curl"]);
+  assert.deepEqual(c.added, ["ex-incline-dumbbell-curl", "ex-hammer-curl"]);
+  assert.deepEqual(c.removed, ["Pull-up"]);
+  assert.equal(c.moved, true);
+  assert.deepEqual(c.changed, []);
+  const [row, pull, curl, hammer] = c.next.items;
+  assert.equal(row.id, "i3");                                       // the same item as before
+  assert.equal(pull.group, undefined); assert.equal(row.group, undefined);   // the old superset is gone
+  assert.ok(curl.group && curl.group === hammer.group);            // a new one
+  assert.equal(hammer.hi, null);                                    // 10–8 isn't a range
+  assert.equal(c.supersets, true);
+  assert.equal(c.next.rest, 120);
+  // the same workout, unchanged
+  const same = proposal(d, { verdict: "", workouts: [{ id: "w-pull", why: "", items: d.workouts.find((w) => w.id === "w-pull").items.map((it, i) =>
+    ({ ex: it.ex, sets: it.sets, reps: it.reps, reps_max: it.hi, rest_seconds: it.rest, superset_with_next: i === 1 })) }] });
+  assert.deepEqual(same.changes, []);
+  assert.deepEqual(same.same, ["Pull"]);
+});
+
+test("Claude's plan: changed numbers, a timed exercise, the last weight kept", () => {
+  let d = week();
+  const w = structuredClone(d.workouts.find((x) => x.id === "w-pull"));
+  w.items[1].w = 62.5;
+  d = applyOp(d, { type: "putWorkout", workout: w });
+  const p = proposal(d, { verdict: "", workouts: [{ id: "w-pull", why: "More sets.", rest_seconds: 150, items: [
+    { ex: "ex-pull-up", sets: 3, reps: 10 }, { ex: "ex-lat-pulldown", sets: 5, reps: 8, reps_max: 12, rest_seconds: 90, superset_with_next: true },
+    { ex: "ex-seated-cable-row", sets: 4, reps: 10, reps_max: 12, rest_seconds: 90 }, { ex: "ex-plank", sets: 3, seconds: 45 }] }] });
+  const c = p.changes[0];
+  assert.equal(c.next.items[1].w, 62.5);
+  assert.deepEqual(c.changed.map((x) => [x.name, plain(x.from), plain(x.to)]), [["Lat pulldown", "4 × 8–12, rest 1:30", "5 × 8–12, rest 1:30"]]);
+  assert.equal(c.restChanged, true);
+  assert.equal(c.next.rest, 150);
+  assert.deepEqual([c.next.items[3].secs, c.next.items[3].reps], [45, null]);
+  assert.equal(c.supersets, false);
+});
+
+test("a pasted answer: the json block at its end", () => {
+  const json = '{"verdict": "ok", "workouts": [{"id": "w-pull", "why": "", "items": []}]}';
+  assert.equal(planFromText(`Here's why…\n\n\`\`\`json\n${json}\n\`\`\`\nGood luck!`).verdict, "ok");
+  assert.equal(planFromText(`Example: \`\`\`json\n{"a":1}\n\`\`\`\nThe plan:\n\`\`\`\n${json}\n\`\`\``).verdict, "ok");
+  assert.equal(planFromText(`Plan: ${json} done`).verdict, "ok");
+  assert.equal(planFromText("No plan here"), null);
+});
+
+test("asking for the plan: the tool is required, and its answer comes back", async () => {
+  let sent = null;
+  const fetchFn = async (url, opts) => { sent = JSON.parse(opts.body); return { ok: true, status: 200, json: async () => ({
+    stop_reason: "tool_use", content: [{ type: "tool_use", id: "tu1", name: "propose_plan", input: { verdict: "v", workouts: [] } }] }) }; };
+  const r = await askClaudePlan("k", [{ role: "user", content: "x" }], { fetchFn });
+  assert.equal(r.toolId, "tu1");
+  assert.equal(r.input.verdict, "v");
+  assert.deepEqual(sent.tools, [PLAN_TOOL]);
+  assert.deepEqual(sent.tool_choice, { type: "tool", name: "propose_plan" });
+  assert.equal(sent.system, PLAN_INSTRUCTIONS);
+  const cut = async () => ({ ok: true, status: 200, json: async () => ({ stop_reason: "max_tokens", content: [] }) });
+  await assert.rejects(askClaudePlan("k", [], { fetchFn: cut }), /cut off/);
+  const none = async () => ({ ok: true, status: 200, json: async () => ({ stop_reason: "end_turn", content: [{ type: "text", text: "hi" }] }) });
+  await assert.rejects(askClaudePlan("k", [], { fetchFn: none }), /didn't send a plan/);
+});
+
+test("the plan's signature changes with the planned workouts, not with others", () => {
+  const d = week();
+  const sig = planSignature(d);
+  const w = structuredClone(d.workouts.find((x) => x.id === "w-pull"));
+  w.items[0].sets = 4;
+  assert.notEqual(planSignature(applyOp(d, { type: "putWorkout", workout: w })), sig);
+  assert.equal(planSignature(applyOp(d, { type: "putWorkout", workout: { id: "w-x", name: "Spare", color: "red", rest: 60, items: [] } })), sig);
+});
