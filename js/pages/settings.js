@@ -13,6 +13,7 @@ import { redirectUri } from "../cloud/onedrive.js";
 import { testSound, soundWorks } from "../sound.js";
 import { NO, chooseRest } from "./common.js";
 import { openLibrary } from "./editors.js";
+import { apiKey, setApiKey, editApiKey } from "./coach.js";
 
 const dayText = (ms) => new Date(ms).toLocaleDateString([], { day: "numeric", month: "short" });
 const stamp = () => new Date().toISOString().slice(0, 10);
@@ -135,6 +136,17 @@ export function openSettings() {
 
     parts.push(caption("Exercises"));
     parts.push(group(actionRow("list", "Exercise list", () => openLibrary(), { detail: "Add your own, change one, hide the ones you don't do" })));
+
+    parts.push(caption("Claude"));
+    const ck = apiKey();
+    parts.push(group(actionRow("sparkle", "Anthropic API key", async () => { await editApiKey(); build(); }, { value: ck ? `…${ck.slice(-4)}` : "Not set" }),
+      ck ? actionRow("trash", "Remove the key", async () => {
+        const ok = await alertBox({ title: "Remove the key?", message: "Ask Claude then opens the Claude app instead.", buttons: [NO, { text: "Remove", value: true, style: "destructive" }] });
+        if (ok) { setApiKey(""); build(); toast("Key removed"); }
+      }, { tone: "danger" }) : null));
+    parts.push(footer(ck
+      ? "Ask Claude (in Plan › a workout, and after a workout) answers right here. Each answer costs a few cents on your Anthropic account. The key stays on this phone, and every profile here uses it."
+      : "Ask Claude (in Plan › a workout, and after a workout) opens the Claude app with your workout, ready to send. With an Anthropic API key (console.anthropic.com, paid separately from a Claude plan: a few cents an answer) the answer comes right here instead."));
 
     parts.push(caption("Backup"));
     parts.push(group(

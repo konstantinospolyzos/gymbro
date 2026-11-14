@@ -7,6 +7,8 @@ import { compareSession, clock, fmtDuration, fmtVolume, fmtNum, longDate, parseD
   sessionStats, shortDate, fmtAxisKg } from "../core.js";
 import { barChart } from "../charts.js";
 import { setsLine, noteText } from "./common.js";
+import { openCoach } from "./coach.js";
+import { sessionReport } from "../coach.js";
 
 const FEELS = [[1, "😮‍💨", "Hard"], [2, "🙂", "Good"], [3, "💪", "Great"]];
 
@@ -130,6 +132,9 @@ export function showSummary(session, { fresh = false } = {}) {
     store.emit();
   };
   body.append(...summaryContent(store.data, session, { fresh, onFeel: (f) => { feel = f; }, onNotes: (t) => { notes = t; } }),
+    h("button", { type: "button", class: "btn gray wide sum-claude", onclick: () => openCoach({ id: `s:${session.id}`, title: session.name,
+      report: () => sessionReport(store.data, { ...(store.data.sessions.find((x) => x.id === session.id) || session), feel: feel || undefined, notes: notes.trim() || undefined }) }) },
+      icon("sparkle", 18), "Ask Claude how it went"),
     h("button", { type: "button", class: "btn primary wide big", onclick: done }, "Done"));
   wrap.appendChild(body);
   document.body.appendChild(wrap);

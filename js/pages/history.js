@@ -1,7 +1,7 @@
 // History: a calendar with your gym days, every logged workout (newest first), each one's summary,
 // changing a logged workout, and logging one you did without the app.
 
-import { h, icon, sheet, group, caption, footer, alertBox, actionSheet, toast, selectOnFocus } from "../ui.js";
+import { h, icon, sheet, group, caption, footer, alertBox, actionSheet, toast, selectOnFocus, actionRow } from "../ui.js";
 import { store } from "../store.js";
 import { uid, exerciseMap } from "../data.js";
 import { today, isoDay, parseDay, addDays, startOfWeek, monthTitle, MONTHS, WEEKDAYS, plural, fmtDuration, fmtVolume, monthTotals,
@@ -10,6 +10,8 @@ import { prefill } from "../workout.js";
 import { sessionCard, chooseWorkout, emptyState, NO } from "./common.js";
 import { summaryContent } from "./summary.js";
 import { openExercisePicker } from "./editors.js";
+import { openCoach } from "./coach.js";
+import { sessionReport } from "../coach.js";
 
 let calMonth = null;          // the month the calendar shows (its first day)
 let shown = 30;               // workouts in the list before "Show more"
@@ -96,6 +98,11 @@ export function openSessionDetail(session) {
   const body = h("div", { class: "sheet-stack" });
   body.append(...summaryContent(store.data, session, { onFeel: (f) => { feel = f; }, onNotes: (t) => { notes = t; } }),
     h("div", { class: "group", style: { marginTop: "6px" } },
+      actionRow("sparkle", "Ask Claude how it went", () => {
+        const cur = store.data.sessions.find((x) => x.id === session.id) || session;
+        openCoach({ id: `s:${session.id}`, title: `${session.name} on ${shortDate(parseDay(session.date))}`,
+          report: () => sessionReport(store.data, { ...cur, feel: feel || undefined, notes: notes.trim() || undefined }) });
+      }, { detail: "Feedback on the sets you did, against the plan and the last times" }),
       h("button", { type: "button", class: "action-row", onclick: () => { api.close(); openSessionEditor(store.data.sessions.find((x) => x.id === session.id) || session); } },
         icon("edit", 20, "row-icon"), h("span", { class: "action-text" }, "Change sets, date or time"), icon("chevron", 15, "chev"))),
     h("button", { type: "button", class: "btn destructive-row", onclick: async () => {

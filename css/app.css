@@ -783,3 +783,28 @@ body.has-mini #update-bar { bottom: calc(var(--tab-h) + var(--safe-b) + 80px); }
   .dock.last .ring-time { animation: none; }
   .sheet, .as-panel, .live { transition-duration: 0.01s; }
 }
+
+/* Ask Claude */
+.coach-intro { display: flex; gap: 14px; align-items: flex-start; }
+.coach-intro .muted { margin-top: 4px; line-height: 1.4; font-size: 15px; }
+.coach-badge { flex: none; width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+  background: #D97757; color: #fff; }
+.coach-when { padding: 0 16px; }
+.coach-q { align-self: flex-end; margin-left: 48px; background: var(--blue); color: #fff; border-radius: 18px 18px 4px 18px; padding: 9px 14px;
+  font-size: 16px; line-height: 1.35; white-space: pre-wrap; }
+.coach-answer { font-size: 16px; line-height: 1.45; }
+.coach-answer > * + * { margin-top: 10px; }
+.coach-answer p, .coach-answer ul, .coach-answer ol { margin: 0; }
+.coach-answer ul, .coach-answer ol { padding-left: 20px; }
+.coach-answer li + li { margin-top: 5px; }
+.coach-answer b { font-weight: 650; }
+.coach-h { font-size: 17px; font-weight: 700; }
+.coach-answer > .coach-h:not(:first-child) { margin-top: 16px; }
+.coach-wait { display: flex; align-items: center; gap: 10px; color: var(--gray); }
+.coach-spin { color: #D97757; animation: spin 1.6s linear infinite; }
+.coach-error { color: var(--red); line-height: 1.4; }
+.coach-input { min-height: 64px; }
+.coach .btn.wide { margin-top: 2px; }
+.coach-report { margin: 0; padding: 12px 16px; font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
+.sum-claude { margin: 4px 0 12px; }
+.form.coach { gap: 12px; }

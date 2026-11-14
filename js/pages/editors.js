@@ -8,6 +8,8 @@ import { WEEKDAYS, WEEK_ORDER, fmtRest, fmtKg, kg, parseNum, timeUnit, fmtSecs, 
 import { TIPS } from "../library.js";
 import { openRecommended } from "./recommend.js";
 import { NO, chooseRest, setsLine } from "./common.js";
+import { openCoach } from "./coach.js";
+import { planReport } from "../coach.js";
 
 const KIND_ORDER = ["weight", "reps", "time"];
 const STEPS = [0.5, 1, 1.25, 2, 2.5, 5, 10];
@@ -362,6 +364,9 @@ export function openWorkoutEditor(workout = null) {
     caption("Rest"), h("div", { class: "group" }, restRow),
     footer("The rest timer starts each time you tap Set done. You can give an exercise its own rest (tap it below)."),
     caption("Exercises"), items,
+    h("div", { class: "group", style: { marginTop: "22px" } }, actionRow("sparkle", "Ask Claude about this workout",
+      () => openCoach({ id: `w:${w.id}`, title: w.name.trim() || "this workout", report: () => planReport(store.data, { ...w, name: w.name.trim() }, [...days]) }),
+      { detail: "Feedback on the exercises, sets and rest, with your whole week" })),
     !isNew ? h("button", { type: "button", class: "btn destructive-row", onclick: async () => {
       const ok = await alertBox({ title: `Delete ${w.name}?`, message: "It leaves your week. The workouts you've logged stay in History.",
         buttons: [NO, { text: "Delete", value: true, style: "destructive" }] });
