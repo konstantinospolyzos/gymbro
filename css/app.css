@@ -316,8 +316,20 @@ button.meta-chip:active { opacity: 0.6; }
 .rest-presets { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 14px; }
 .preset { padding: 6px 11px; border-radius: 9px; background: var(--fill); font-size: 14px; font-weight: 600; color: var(--label2); }
 .preset.on { background: var(--blue); color: #fff; }
-.item-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 58px; padding: 8px 12px 8px 14px; text-align: left; }
-.item-row:active { background: var(--fill); }
+.item-row { display: flex; align-items: center; width: 100%; min-height: 58px; text-align: left; background: var(--card); position: relative; }
+.item-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; align-self: stretch; padding: 8px 6px 8px 14px; text-align: left; }
+.item-main:active { background: var(--fill); }
+.item-video { flex: none; width: 34px; height: 34px; border-radius: 17px; background: var(--fill); color: var(--blue); display: inline-flex; align-items: center; justify-content: center; }
+.item-video:active { opacity: 0.5; }
+.item-video .icon { margin-left: 2px; }
+/* the handle to drag an exercise to another place */
+.drag-handle { flex: none; width: 46px; align-self: stretch; display: flex; align-items: center; justify-content: center; color: var(--gray2);
+  touch-action: none; cursor: grab; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.drag-handle:focus-visible { outline: 2px solid var(--blue); outline-offset: -6px; border-radius: 10px; }
+.group.sorting { overflow: visible; }
+.group.sorting .item-row:not(.dragging) { transition: transform 0.18s ease; }
+.item-row.dragging { z-index: 3; border-radius: 12px; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3); cursor: grabbing; }
+.item-row.dragging .drag-handle { color: var(--blue); }
 .item-num { width: 26px; height: 26px; border-radius: 13px; background: var(--fill); color: var(--gray); font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none; }
 .item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .item-name { font-size: 16.5px; font-weight: 500; }
@@ -828,3 +840,18 @@ body.has-mini #update-bar { bottom: calc(var(--tab-h) + var(--safe-b) + 80px); }
 .plan-done .btn { margin-left: auto; }
 .coach-live .coach-wait.small { font-size: 13px; margin-bottom: 10px; }
 .coach-live .coach-wait.small .icon { width: 16px; height: 16px; }
+
+/* An exercise's video, played here */
+.video-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #000; }
+.video-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.video-none { display: flex; gap: 14px; align-items: flex-start; }
+.video-none .muted { margin-top: 4px; line-height: 1.4; font-size: 15px; }
+.video-none-icon { flex: none; width: 44px; height: 44px; border-radius: 12px; background: var(--fill); color: var(--gray); display: flex; align-items: center; justify-content: center; }
+
+/* Claude's alternatives to an exercise */
+.alt-name { font-size: 18px; font-weight: 700; }
+.alt-why { margin: 6px 0 0; font-size: 15.5px; line-height: 1.4; }
+.alt-tip { margin: 8px 0 0; display: flex; gap: 8px; font-size: 14.5px; line-height: 1.4; color: var(--gray); }
+.alt-tip .icon { flex: none; margin-top: 2px; color: var(--blue); }
+.alt-buttons { display: flex; gap: 10px; margin-top: 12px; }
+.alt-buttons .btn { flex: 1; min-height: 44px; padding: 10px 14px; }

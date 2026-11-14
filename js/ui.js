@@ -73,6 +73,7 @@ const ICONS = {
   doc: '<path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10A.5.5 0 0 1 6.5 20V4a.5.5 0 0 1 .5-.5z"/><path d="M14 3.5V8h4"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   search: '<circle cx="10.6" cy="10.6" r="6"/><path d="M15.2 15.2l4.6 4.6"/>',
+  grip: '<path d="M5 8.5h14M5 12h14M5 15.5h14"/>',
   list: '<path d="M9 7h11M9 12h11M9 17h11"/><circle cx="4.6" cy="7" r="1.1" fill="currentColor"/><circle cx="4.6" cy="12" r="1.1" fill="currentColor"/><circle cx="4.6" cy="17" r="1.1" fill="currentColor"/>',
   sparkle: '<path d="M12 3.6l1.9 5 5 1.9-5 1.9-1.9 5-1.9-5-5-1.9 5-1.9z"/><path d="M18.6 15.6l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
   skip: '<path d="M5.5 6.6v10.8L13.6 12z"/><path d="M13.6 6.6v10.8L21.7 12z"/>',
@@ -362,4 +363,76 @@ export function darkStatusBar(on) {
 export function selectOnFocus(input) {
   input.addEventListener("focus", () => setTimeout(() => { try { input.setSelectionRange(0, input.value.length); } catch { /* ignore */ } }, 0));
   return input;
+}
+
+/**
+ * Drag to reorder: hold a row's handle and move it; the other rows make room; let go to drop.
+ * list: the element holding the rows; rows / handle: selectors; onDrop(from, to) when the place changed.
+ * The handle also takes the keyboard: arrow up / down move the row one place.
+ */
+export function dragSort(list, { rows, handle, onDrop }) {
+  list.addEventListener("keydown", (ev) => {
+    const hd = ev.target.closest?.(handle);
+    if (!hd || !list.contains(hd) || !["ArrowUp", "ArrowDown"].includes(ev.key)) return;
+    const all = [...list.querySelectorAll(rows)], from = all.indexOf(hd.closest(rows));
+    const to = from + (ev.key === "ArrowUp" ? -1 : 1);
+    if (from < 0 || to < 0 || to >= all.length) return;
+    ev.preventDefault();
+    onDrop(from, to, { keyboard: true });
+  });
+  list.addEventListener("pointerdown", (ev) => {
+    const hd = ev.target.closest?.(handle);
+    if (!hd || !list.contains(hd) || (ev.pointerType === "mouse" && ev.button !== 0)) return;
+    const all = [...list.querySelectorAll(rows)];
+    const row = hd.closest(rows), from = all.indexOf(row);
+    if (from < 0) return;
+    ev.preventDefault();
+    try { hd.setPointerCapture(ev.pointerId); } catch { /* not supported */ }
+    // where everything was when the drag began (the page coordinates of the scrolling sheet)
+    const scroller = row.closest(".sheet-body, .live-scroll") || document.scrollingElement;
+    const rects = all.map((r) => r.getBoundingClientRect());
+    const size = rects[from].height;
+    const startY = ev.clientY, startScroll = scroller.scrollTop;
+    let y = ev.clientY, to = from, frame = 0, done = false;
+    row.classList.add("dragging");
+    list.classList.add("sorting");
+    const place = () => {
+      frame = 0;
+      if (done) return;
+      // near the top or bottom: scroll the sheet along
+      const box = scroller === document.scrollingElement ? { top: 0, bottom: window.innerHeight } : scroller.getBoundingClientRect();
+      const edge = 56;
+      const speed = y < box.top + edge ? -Math.ceil((box.top + edge - y) / 5) : y > box.bottom - edge ? Math.ceil((y - box.bottom + edge) / 5) : 0;
+      if (speed) scroller.scrollTop += speed;
+      const scrolled = scroller.scrollTop - startScroll;
+      const dy = y - startY + scrolled;
+      row.style.transform = `translateY(${dy}px)`;
+      const center = rects[from].top + size / 2 + dy;
+      to = from;
+      for (let k = from + 1; k < all.length; k++) if (center > rects[k].top + rects[k].height / 2) to = k;
+      for (let k = from - 1; k >= 0; k--) if (center < rects[k].top + rects[k].height / 2) to = k;
+      all.forEach((r, k) => {
+        if (k === from) return;
+        const shift = from < to && k > from && k <= to ? -size : to < from && k >= to && k < from ? size : 0;
+        r.style.transform = shift ? `translateY(${shift}px)` : "";
+      });
+      if (speed) frame = requestAnimationFrame(place);
+    };
+    const move = (e) => { y = e.clientY; if (!frame) frame = requestAnimationFrame(place); };
+    const end = (e) => {
+      if (done) return;
+      done = true;
+      cancelAnimationFrame(frame);
+      hd.removeEventListener("pointermove", move);
+      hd.removeEventListener("pointerup", end);
+      hd.removeEventListener("pointercancel", end);
+      row.classList.remove("dragging");
+      list.classList.remove("sorting");
+      for (const r of all) r.style.transform = "";
+      if (e.type === "pointerup" && to !== from) onDrop(from, to, { keyboard: false });
+    };
+    hd.addEventListener("pointermove", move);
+    hd.addEventListener("pointerup", end);
+    hd.addEventListener("pointercancel", end);
+  });
 }

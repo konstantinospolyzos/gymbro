@@ -363,6 +363,17 @@ export const PLAN_SCHEMA = {
   },
 };
 
+/** The app's exercises with their ids, by muscle group: "Back: Pull-up [ex-pull-up], …" */
+function exerciseIdList(data) {
+  const by = new Map();
+  for (const e of data.exercises) {
+    if (e.archived) continue;
+    if (!by.has(e.muscle)) by.set(e.muscle, []);
+    by.get(e.muscle).push(`${e.name} [${e.id}]${e.kind === "time" ? " (timed)" : e.kind === "reps" ? " (body weight)" : ""}`);
+  }
+  return [...by].map(([m, names]) => `${m}: ${names.join(", ")}`);
+}
+
 /** What Claude is told about the week: every planned workout with ids, the last times, the muscles */
 export function weekReport(data, now = today()) {
   const exMap = exerciseMap(data);
@@ -382,14 +393,7 @@ export function weekReport(data, now = today()) {
     return `${w.name.toUpperCase()} [id ${w.id}], on ${on}. Rest between sets: ${fmtRest(w.rest)}. ${workoutSets(w)} sets.\n${items.join("\n")}`;
   });
   const days = WEEK_ORDER.map((d) => `${WEEKDAYS[d].slice(0, 3)}: ${data.workouts.find((w) => w.id === data.schedule[String(d)])?.name || "rest"}`);
-  const list = [];
-  const by = new Map();
-  for (const e of data.exercises) {
-    if (e.archived) continue;
-    if (!by.has(e.muscle)) by.set(e.muscle, []);
-    by.get(e.muscle).push(`${e.name} [${e.id}]${e.kind === "time" ? " (timed)" : e.kind === "reps" ? " (body weight)" : ""}`);
-  }
-  for (const [m, names] of by) list.push(`${m}: ${names.join(", ")}`);
+  const list = exerciseIdList(data);
   return [
     `MY WEEK: ${days.join(" · ")}. Sets are kg × reps.`,
     workouts.join("\n\n"),
@@ -431,19 +435,22 @@ export async function askClaudePlan(apiKey, messages, opts = {}) {
   return { input, content: r.content };
 }
 
-/** Claude's plan from a pasted answer (the ```json block at its end, or the JSON itself) */
-export function planFromText(text) {
+/** JSON from a pasted answer (the ```json block at its end, or the JSON itself) with a list under `key` */
+export function jsonFromText(text, key) {
   const t = String(text || "");
   const blocks = [...t.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map((m) => m[1]);
   const tries = [...blocks.reverse(), t, t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1)];
   for (const c of tries) {
     try {
       const v = JSON.parse(c.trim());
-      if (v && Array.isArray(v.workouts)) return v;
+      if (v && Array.isArray(v[key])) return v;
     } catch { /* the next one */ }
   }
   return null;
 }
+
+/** Claude's plan from a pasted answer */
+export const planFromText = (text) => jsonFromText(text, "workouts");
 
 /** A workout's supersets as text: "a+b|c+d" */
 const pairs = (items) => [...new Set(supersets(items).map((g) => (g ? items.slice(g.start, g.end + 1).map((x) => x.ex).join("+") : null)).filter(Boolean))].sort().join("|");
@@ -518,4 +525,95 @@ export function planSignature(data) {
   const ids = [...new Set(Object.values(data.schedule))].sort();
   return JSON.stringify(ids.map((id) => data.workouts.find((w) => w.id === id)).filter(Boolean)
     .map((w) => [w.id, w.rest, w.items.map((it) => [it.ex, it.sets, it.reps, it.hi, it.secs, it.rest, it.group || null])]));
+}
+
+// ---------------------------------------------------------------------------
+// Another exercise instead of one, for a reason you give (knee pain, the machine is taken): Claude suggests
+// the best replacements from the app's list, with how to do them; you pick one.
+// ---------------------------------------------------------------------------
+export const ALT_INSTRUCTIONS = `You are an experienced strength coach. The lifter tracks their training in GymBro, a gym app. They want a
+different exercise in place of one in their workout, and say why (pain, a machine that's taken or missing,
+they don't like it). Suggest the three best replacements from the app's exercise list, best first.
+
+- Train the same muscles as closely as possible, in a way that respects their reason: with knee pain, for
+  example, less knee bend under load, a controlled range, or a hip-led movement.
+- Don't suggest an exercise that's already in the workout.
+- With pain: choose options that are usually pain-free, tell them to stop anything that hurts and to see a
+  physiotherapist if it lasts. Don't diagnose.
+- "why": one short sentence on why it suits them. "tip": one short sentence on how to do it so it respects
+  their reason (setup, range, tempo). "note": one short sentence for them, or empty.`;
+
+/** The shape of Claude's answer (structured output) */
+export const ALT_SCHEMA = {
+  type: "object", additionalProperties: false,
+  required: ["note", "alternatives"],
+  properties: {
+    note: { type: "string", description: "One short sentence for the lifter, or empty" },
+    alternatives: { type: "array", description: "The three best replacements, best first", items: {
+      type: "object", additionalProperties: false,
+      required: ["ex", "why", "tip"],
+      properties: {
+        ex: { type: "string", description: "Exercise id from the app's exercise list, e.g. ex-leg-press" },
+        why: { type: "string", description: "Why it suits them, one short sentence" },
+        tip: { type: "string", description: "How to do it so it respects their reason, one short sentence" },
+      } } },
+  },
+};
+
+/** What Claude is told: the exercise, your reason, the workout it's in, its last times, your week, the list.
+ *  workout: {name, lines: ["1. Squat: 4 × 6–10", …]} */
+export function altMessage(data, { exId, workout = null, reason = "" }) {
+  const ex = exerciseMap(data).get(exId);
+  const name = ex?.name || exId;
+  const last = lastTimes(data, exId);
+  return [
+    `I want something instead of ${name} [${exId}] in my ${workout?.name || ""} workout.`.replace("my  workout", "my workout"),
+    `Why: ${String(reason).trim() || "no reason given"}`,
+    workout?.lines?.length ? `THE WORKOUT:\n${workout.lines.join("\n")}` : "",
+    last.length ? `My last times on ${name} (kg × reps): ${last.join(" | ")}` : "",
+    ex?.notes ? `My notes on ${name}: ${ex.notes}` : "",
+    section("MY WEEK:", weekLines(data)),
+    section("THE APP'S EXERCISE LIST (name [id]):", exerciseIdList(data)),
+  ].filter(Boolean).join("\n\n");
+}
+
+/** For the Claude app: it ends with its suggestions as JSON to paste back */
+export function forClaudeAppAlt(message) {
+  return `${ALT_INSTRUCTIONS}
+
+Then end your answer with your suggestions in one \`\`\`json code block, which I'll paste back into the app,
+in exactly this shape:
+{"note": "", "alternatives": [{"ex": "<exercise id>", "why": "...", "tip": "..."}]}
+
+---
+
+${message}`;
+}
+
+/** Ask Claude for alternatives -> {input, content} */
+export async function askClaudeAlternatives(apiKey, messages, opts = {}) {
+  const r = await streamClaude(apiKey, { max_tokens: 8000, system: ALT_INSTRUCTIONS, messages,
+    output_config: { effort: EFFORT, format: { type: "json_schema", schema: ALT_SCHEMA } } }, opts);
+  if (r.stop === "max_tokens") throw new Error("Claude's answer got cut off. Try again.");
+  if (r.stop === "refusal") throw new Error("Claude didn't suggest anything this time. Try again.");
+  let input = null;
+  try { input = JSON.parse(r.text); } catch { input = jsonFromText(r.text, "alternatives"); }
+  if (!Array.isArray(input?.alternatives)) throw new Error("Claude didn't suggest any exercises. Try again.");
+  return { input, content: r.content };
+}
+
+/** Claude's suggestions, checked against the app: only exercises in your list, not the one being replaced
+ *  or already in the workout, each once. -> {note, list: [{id, name, why, tip}]} */
+export function alternativesFrom(data, input, { exId = null, exclude = [] } = {}) {
+  const exMap = exerciseMap(data);
+  const byName = new Map(data.exercises.filter((e) => !e.archived).map((e) => [e.name.toLowerCase(), e]));
+  const skip = new Set([exId, ...exclude].filter(Boolean));
+  const list = [];
+  for (const a of Array.isArray(input?.alternatives) ? input.alternatives : []) {
+    const ex = exMap.get(a?.ex) || byName.get(String(a?.ex || "").toLowerCase());
+    if (!ex || ex.archived || skip.has(ex.id)) continue;
+    skip.add(ex.id);
+    list.push({ id: ex.id, name: ex.name, why: String(a.why || "").trim(), tip: String(a.tip || "").trim() });
+  }
+  return { note: String(input?.note || "").trim(), list: list.slice(0, 4) };
 }

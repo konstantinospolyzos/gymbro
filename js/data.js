@@ -3,7 +3,7 @@
 // replayed on the newest cloud copy when the app syncs, so the phone and the computer never
 // overwrite each other's workouts.
 
-import { weekOp } from "./library.js";
+import { weekOp, youTubeId } from "./library.js";
 
 export const APP_NAME = "GymBro";
 export const DATA_VERSION = 1;
@@ -145,6 +145,8 @@ function normExercise(e) {
     ...(str(e.notes, 500) ? { notes: str(e.notes, 500) } : {}),
     // done with a bar: its weight (0: no bar, even if the library has one)
     ...(posNum(e.bar) !== null ? { bar: Math.min(posNum(e.bar), 100) } : {}),
+    // your own video for it (a YouTube video id)
+    ...(youTubeId(e.video) ? { video: youTubeId(e.video) } : {}),
   };
 }
 

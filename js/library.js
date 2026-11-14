@@ -217,3 +217,41 @@ export const VOLUME = {
 
 /** A video of the exercise: a YouTube search, so there's always something that shows the movement */
 export const videoUrl = (name) => `https://www.youtube.com/results?search_query=${encodeURIComponent(`${name} exercise form`)}`;
+
+/** A technique video for each exercise (YouTube), played inside GymBro: leaving the app for YouTube can come
+ *  back to a blank screen on the iPhone. Your own link (an exercise's "video") comes first. */
+export const VIDEOS = {
+  "ex-pull-up": "TMnxKjdYcME", "ex-chin-up": "ykPUIEj4-W0", "ex-lat-pulldown": "CAwf7n6Luuc", "ex-single-arm-pulldown": "jykYYKk4BRo",
+  "ex-chest-supported-row": "ro2vfHfD0DQ", "ex-barbell-row": "A1tmBJKKfVs", "ex-dumbbell-row": "fURsHPHgssI", "ex-seated-cable-row": "OeLb503NZHk",
+  "ex-t-bar-row": "oa-WYYfTYcM", "ex-deadlift": "8luF-t9o1AM", "ex-straight-arm-pulldown": "3sNc3hgtyjM", "ex-face-pull": "wnPX6Fwe-Fg",
+  "ex-back-extension": "a2UrKheEcIc",
+  "ex-bench-press": "XFKZ6Yw8XbE", "ex-incline-bench-press": "11gY7Q5D5wo", "ex-dumbbell-bench-press": "5Y3VZsLb1Ys",
+  "ex-incline-dumbbell-press": "5iACxPVXKGg", "ex-chest-press-machine": "ai4EuMwfhho", "ex-chest-fly-machine": "ze4JaQCcGLg",
+  "ex-cable-crossover": "50BDseX8lTY", "ex-seated-cable-fly": "VgKCIZgca58", "ex-dumbbell-fly": "Nhvz9EzdJ4U", "ex-dips": "yN6Q1UI_xkE",
+  "ex-push-up": "s1X8e4JFdbE",
+  "ex-overhead-press": "F3QY5vMz_6I", "ex-dumbbell-shoulder-press": "WKEl69bIGus", "ex-machine-shoulder-press": "e5gJP7quyGk",
+  "ex-arnold-press": "hNkDPoM3Oro", "ex-lateral-raise": "ssAo_xwFt5c", "ex-cable-lateral-raise": "-CAGLnWUkWA", "ex-front-raise": "zkP0MsTcIVU",
+  "ex-rear-delt-fly": "UO_v23hHAdM", "ex-reverse-pec-deck": "e4dJ1QoxUtI", "ex-upright-row": "_NLPcDcFH0o", "ex-shrug": "xiLT85G_GuU",
+  "ex-barbell-curl": "9BpYNH4nb_Q", "ex-ez-bar-curl": "SDFZBaJcTsU", "ex-dumbbell-curl": "ykJmrZ5v0Oo", "ex-hammer-curl": "JoF6iPSStCw",
+  "ex-incline-dumbbell-curl": "e3zNNfjJszA", "ex-preacher-curl": "vngli9UR6Hw", "ex-cable-curl": "16aEi1a68E0", "ex-bayesian-curl": "aeS38n_Ht6A",
+  "ex-triceps-pushdown": "w_viR9hVi4A", "ex-overhead-triceps-extension": "-Vyt2QdsR7E", "ex-overhead-cable-extension": "AUsSlsBu5eg",
+  "ex-skull-crusher": "tj81tVq3wLo", "ex-close-grip-bench-press": "a2G3IdaTcPU", "ex-bench-dips": "iH16WFso6fo",
+  "ex-squat": "QLbMsabhBqY", "ex-front-squat": "npVgCT7NznU", "ex-leg-press": "tRV9hBDT3us", "ex-hack-squat": "hglQExHCM9Q",
+  "ex-romanian-deadlift": "_oyxCn2iSjU", "ex-leg-extension": "xAUvXdHu1sI", "ex-seated-leg-curl": "Z5pRnXaCjpM", "ex-leg-curl": "SbSNUXPRkc8",
+  "ex-walking-lunge": "YYWhkctnP2o", "ex-bulgarian-split-squat": "YFLHDXeekVc", "ex-standing-calf-raise": "ucy86plaufg",
+  "ex-seated-calf-raise": "smyXy_dhXo8", "ex-calf-raise": "8k435cj30gc",
+  "ex-hip-thrust": "aweBS7K71l8", "ex-glute-kickback": "S6r4GTYK8lI", "ex-hip-abduction": "I4ApZY585nE",
+  "ex-plank": "6LqqeBtFn9M", "ex-crunch": "2R93PU2IM-Y", "ex-hanging-leg-raise": "-LHetdLNhjI", "ex-cable-crunch": "0KEP6A1deBE",
+  "ex-ab-wheel": "nCh8VfWY5_g", "ex-russian-twist": "DF0sPfwys_g", "ex-cable-woodchopper": "yPvAj_X_5NM",
+};
+
+/** The video in a YouTube link (watch, youtu.be, Shorts, embed, live) or a bare video id -> its id, or null */
+export function youTubeId(text) {
+  const t = String(text || "").trim();
+  if (/^[\w-]{11}$/.test(t)) return t;
+  const m = t.match(/(?:youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/|embed\/|live\/|v\/)|youtu\.be\/)([\w-]{11})/i);
+  return m ? m[1] : null;
+}
+
+/** An exercise's video: your own link first, then the one picked for it */
+export const videoIdOf = (ex) => youTubeId(ex?.video) || VIDEOS[ex?.id] || null;

@@ -288,3 +288,62 @@ test("the plan's signature changes with the planned workouts, not with others", 
   assert.notEqual(planSignature(applyOp(d, { type: "putWorkout", workout: w })), sig);
   assert.equal(planSignature(applyOp(d, { type: "putWorkout", workout: { id: "w-x", name: "Spare", color: "red", rest: 60, items: [] } })), sig);
 });
+
+// ---------------------------------------------------------------------------
+// Version 1.11: Claude's alternatives to an exercise, for a reason (knee pain)
+// ---------------------------------------------------------------------------
+import { altMessage, alternativesFrom, askClaudeAlternatives, forClaudeAppAlt, jsonFromText, ALT_SCHEMA, ALT_INSTRUCTIONS } from "../js/coach.js";
+
+test("alternatives: what Claude is told (the reason, the workout, the last times, the list with ids)", () => {
+  const d = week();
+  const r = plain(altMessage(d, { exId: "ex-lat-pulldown", reason: "  my elbow hurts  ",
+    workout: { name: "Pull", lines: ["1. Pull-up: 3 × 10", "2. Lat pulldown: 4 × 8–12"] } }));
+  assert.match(r, /^I want something instead of Lat pulldown \[ex-lat-pulldown\] in my Pull workout\.\n\nWhy: my elbow hurts\n\nTHE WORKOUT:\n1\. Pull-up/);
+  assert.match(r, /My last times on Lat pulldown \(kg × reps\): Wed 11 Nov: 62\.5×12/);
+  assert.match(r, /My notes on Lat pulldown: Seat on 4/);
+  assert.match(r, /MY WEEK:\nMonday: /);
+  assert.match(r, /Seated cable row \[ex-seated-cable-row\]/);
+  assert.match(plain(altMessage(d, { exId: "ex-squat" })), /instead of Squat \[ex-squat\] in my workout\.\n\nWhy: no reason given/);
+  assert.ok(forClaudeAppAlt("M").startsWith(ALT_INSTRUCTIONS) && forClaudeAppAlt("M").includes("```json") && forClaudeAppAlt("M").endsWith("M"));
+});
+
+test("alternatives: only exercises in the list, not the one replaced or already in the workout, each once", () => {
+  const d = week();
+  const out = alternativesFrom(d, { note: "Go easy at first.", alternatives: [
+    { ex: "ex-lat-pulldown", why: "same", tip: "" },
+    { ex: "ex-pull-up", why: "already there", tip: "" },
+    { ex: "ex-made-up", why: "?", tip: "" },
+    { ex: "Single-arm lat pulldown", why: "One arm at a time spares the elbow.", tip: "Neutral grip." },
+    { ex: "ex-straight-arm-pulldown", why: "No elbow bend.", tip: "Arms almost straight." },
+    { ex: "ex-single-arm-pulldown", why: "twice", tip: "" }] }, { exId: "ex-lat-pulldown", exclude: ["ex-pull-up"] });
+  assert.equal(out.note, "Go easy at first.");
+  assert.deepEqual(out.list.map((x) => x.id), ["ex-single-arm-pulldown", "ex-straight-arm-pulldown"]);
+  assert.equal(out.list[0].tip, "Neutral grip.");
+  assert.deepEqual(alternativesFrom(d, null).list, []);
+});
+
+test("alternatives: asked in their shape (structured output), streamed; a pasted answer works too", async () => {
+  let sent = null;
+  const ans = { note: "", alternatives: [{ ex: "ex-leg-press", why: "Less knee bend.", tip: "Feet high." }] };
+  const r = await askClaudeAlternatives("k", [{ role: "user", content: "x" }], { fetchFn: async (u, o) => { sent = JSON.parse(o.body); return sse(JSON.stringify(ans)); } });
+  assert.deepEqual(r.input, ans);
+  assert.deepEqual(sent.output_config, { effort: "medium", format: { type: "json_schema", schema: ALT_SCHEMA } });
+  assert.equal(sent.system, ALT_INSTRUCTIONS);
+  assert.equal(sent.tool_choice, undefined);
+  await assert.rejects(askClaudeAlternatives("k", [], { fetchFn: async () => sse("No idea.") }), /didn't suggest/);
+  assert.equal(jsonFromText("Try these:\n```json\n" + JSON.stringify(ans) + "\n```", "alternatives").alternatives[0].ex, "ex-leg-press");
+  assert.equal(jsonFromText('{"workouts": []}', "alternatives"), null);
+});
+
+test("the alternatives' shape follows the API's rules for structured outputs", () => {
+  const walk = (node, path) => {
+    for (const bad of ["minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems"]) assert.equal(node[bad], undefined, `${path}: ${bad}`);
+    if (node.type === "object") {
+      assert.equal(node.additionalProperties, false, path);
+      assert.deepEqual([...node.required].sort(), Object.keys(node.properties).sort(), path);
+      for (const [k, v] of Object.entries(node.properties)) walk(v, `${path}.${k}`);
+    }
+    if (node.type === "array") walk(node.items, `${path}[]`);
+  };
+  walk(ALT_SCHEMA, "alternatives");
+});

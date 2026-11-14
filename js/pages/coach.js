@@ -1,13 +1,14 @@
 // Ask Claude about a workout: in GymBro with your own Anthropic API key (the answer and follow-ups right
 // here, kept for next time), or without one, handed to the Claude app (which a Claude plan covers).
 
-import { h, icon, sheet, group, footer, actionRow, toast, copyText, askText, alertBox, switchRow, chip } from "../ui.js";
+import { h, icon, sheet, group, caption, footer, actionRow, toast, copyText, askText, alertBox, switchRow, chip } from "../ui.js";
 import { store } from "../store.js";
 import { exerciseMap } from "../data.js";
 import { lsGet, lsSet, lsDel } from "../cloud/common.js";
 import { key } from "../profiles.js";
 import { askClaude, firstMessage, forClaudeApp, blocks, inline, weekReport, planMessage, forClaudeAppPlan, askClaudePlan, planFromText, proposal,
-  planSignature } from "../coach.js";
+  planSignature, altMessage, forClaudeAppAlt, askClaudeAlternatives, alternativesFrom, jsonFromText } from "../coach.js";
+import { openVideo } from "./video.js";
 import { shortDate, repRange, fmtRest, fmtSecs, timeUnit, WEEKDAYS, WEEK_ORDER } from "../core.js";
 import { NO, workoutTile } from "./common.js";
 
@@ -335,4 +336,101 @@ export function openPlanCoach() {
 
   draw();
   sheet({ title: "Check my week", right: { text: "Done", bold: true, onClick: (a) => a.close() }, body, onClose: () => busy?.abort() });
+}
+
+// ---------------------------------------------------------------------------
+// Another exercise for a reason (knee pain, a machine that's taken): Claude's three best, from your list
+// ---------------------------------------------------------------------------
+/**
+ * exId: the exercise to replace; exclude: the ones already in the workout; workout: {name, lines} for Claude;
+ * onPick(id): use that one instead (the caller swaps it in, in the plan or in today's workout).
+ */
+export function openClaudeSwap({ exId, exclude = [], workout = null, onPick }) {
+  const ex = exerciseMap(store.data).get(exId), name = ex?.name || "this exercise";
+  const body = h("div", { class: "form coach" });
+  let busy = null, error = "", result = null, progress = null, api = null;
+  const reason = h("textarea", { class: "note-input coach-input", rows: 2, maxlength: 600,
+    placeholder: "Why? For example: my knee hurts when I go deep" });
+  const message = () => altMessage(store.data, { exId, workout, reason: reason.value });
+  const got = (input) => {
+    result = alternativesFrom(store.data, input, { exId, exclude });
+    error = result.list.length ? "" : "None of Claude's suggestions are in your exercise list. Ask again, or pick one yourself with Swap.";
+  };
+  const pick = (id) => { api.close(); onPick(id); };
+
+  const ask = async () => {
+    const k = apiKey();
+    if (!k) return;
+    busy = new AbortController(); error = "";
+    progress = h("span", null, "Claude is looking for options…");
+    draw();
+    try {
+      const r = await askClaudeAlternatives(k, [{ role: "user", content: message() }], { signal: busy.signal,
+        onPhase: (ph) => { progress.textContent = ph === "thinking" ? "Claude is thinking…" : "Claude is writing…"; } });
+      got(r.input);
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+      error = err.message;
+    }
+    busy = null;
+    draw();
+  };
+
+  const paste = () => {
+    const box = h("textarea", { class: "note-input", rows: 10, placeholder: "Paste Claude's whole answer here (with the code block at its end)" });
+    sheet({ title: "Claude's answer", left: { text: "Cancel" }, right: { text: "Show", bold: true, onClick: async (a) => {
+      const input = jsonFromText(box.value, "alternatives");
+      if (!input) { await alertBox({ title: "No suggestions in that text", message: "Copy Claude's whole answer, including the code block at the end, and paste it here." }); return; }
+      got(input);
+      a.close();
+      draw();
+    } }, body: h("div", { class: "form" }, h("div", { class: "group" }, box),
+      navigator.clipboard?.readText ? h("button", { type: "button", class: "btn tinted wide", style: { marginTop: "12px" }, onclick: async () => {
+        try { box.value = await navigator.clipboard.readText(); } catch { toast("Tap and hold in the box, then Paste"); }
+      } }, "Paste from the clipboard") : null) });
+    setTimeout(() => box.focus(), 350);
+  };
+
+  function draw() {
+    const k = apiKey();
+    const parts = [];
+    if (!result) {
+      parts.push(h("div", { class: "card coach-intro" }, h("span", { class: "coach-badge" }, icon("sparkle", 22)),
+        h("div", null, h("div", { class: "card-title" }, `Instead of ${name}`),
+          h("div", { class: "muted" }, "Tell Claude why, and it suggests the best replacements from your exercise list, with how to do them. It knows the rest of the workout and your week."))));
+    } else {
+      if (result.note) parts.push(h("div", { class: "card" }, answerView(result.note)));
+      for (const alt of result.list) {
+        parts.push(h("div", { class: "card alt-card" },
+          h("div", { class: "alt-name" }, alt.name),
+          alt.why ? h("p", { class: "alt-why" }, alt.why) : null,
+          alt.tip ? h("p", { class: "alt-tip" }, icon("info", 15), h("span", null, alt.tip)) : null,
+          h("div", { class: "alt-buttons" },
+            h("button", { type: "button", class: "btn gray", onclick: () => openVideo(alt.id) }, icon("play", 15), "Video"),
+            h("button", { type: "button", class: "btn primary", onclick: () => pick(alt.id) }, "Use this"))));
+      }
+    }
+    if (busy) parts.push(h("div", { class: "card coach-wait" }, icon("sparkle", 20, "coach-spin"), progress),
+      footer("Keep GymBro open until it's done."));
+    if (error) parts.push(h("div", { class: "card coach-error" }, error));
+
+    if (result) parts.push(caption("Not quite right?"));
+    parts.push(h("div", { class: "group" }, reason));
+    if (k) {
+      parts.push(h("button", { type: "button", class: `btn ${result ? "tinted" : "primary"} wide`, disabled: Boolean(busy), onclick: ask },
+        icon("sparkle", 18), result ? "Ask again" : error ? "Try again" : "Ask Claude"));
+    } else {
+      parts.push(h("button", { type: "button", class: "btn primary wide", onclick: () => toClaudeApp(forClaudeAppAlt(message())) },
+        icon("upload", 18), "Open in the Claude app"),
+        footer("Claude answers in its app and ends with its suggestions in a code block. Copy its whole answer, come back, and paste it here."),
+        group(actionRow("doc", "Paste Claude's answer", paste, { detail: "See the suggestions and pick one" }),
+          actionRow("sparkle", "Get the answer here in GymBro", async () => { if (await editApiKey()) draw(); }, { detail: "With an Anthropic API key: a few cents" })));
+    }
+    parts.push(group(actionRow("doc", "What Claude sees", () => showReport(message()))));
+    body.replaceChildren(...parts.filter(Boolean));
+  }
+
+  draw();
+  api = sheet({ title: "Ask Claude", left: { text: "Cancel" }, body, onClose: () => busy?.abort() });
+  setTimeout(() => { if (!result) reason.focus(); }, 350);
 }

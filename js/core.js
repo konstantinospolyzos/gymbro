@@ -4,7 +4,7 @@
 import { exerciseMap, bySessionStart, uid, DEFAULT_SETTINGS } from "./data.js";
 import { PATTERN, BARBELL, VOLUME, VOLUME_MUSCLES } from "./library.js";
 
-export const APP_VERSION = "1.10";
+export const APP_VERSION = "1.11";
 
 // ---------------------------------------------------------------------------
 // Dates (local time; a workout's "date" is the day it started)
@@ -527,6 +527,34 @@ function tidyGroups(list) {
     const g = list[i].group;
     if (g && list[i - 1]?.group !== g && list[i + 1]?.group !== g) delete list[i].group;
   }
+}
+
+/** Supersets after exercises moved: one on its own is none, and one split in two becomes two */
+export function regroup(list) {
+  const seen = new Set();
+  for (let i = 0; i < list.length;) {
+    const g = list[i].group;
+    if (!g) { i += 1; continue; }
+    let j = i;
+    while (j + 1 < list.length && list[j + 1].group === g) j += 1;
+    if (j === i) delete list[i].group;
+    else if (seen.has(g)) { const ng = uid("g"); for (let k = i; k <= j; k++) list[k].group = ng; seen.add(ng); }
+    else seen.add(g);
+    i = j + 1;
+  }
+  return list;
+}
+
+/** Move an exercise (dragged, or Move up / down). Dropped inside a superset it joins it; next to its own it
+ *  stays in it; anywhere else it's on its own. */
+export function moveItem(list, from, to) {
+  if (from === to || !list[from] || to < 0 || to >= list.length) return list;
+  const [it] = list.splice(from, 1);
+  list.splice(to, 0, it);
+  const prev = list[to - 1], next = list[to + 1];
+  if (prev?.group && prev.group === next?.group) it.group = prev.group;
+  else if (!(it.group && (prev?.group === it.group || next?.group === it.group))) delete it.group;
+  return regroup(list);
 }
 
 /** Do an exercise in turn with the next one (on), or not any more (off) */

@@ -8,13 +8,14 @@ import { store } from "../store.js";
 import { exerciseMap } from "../data.js";
 import { clock, fmtKg, kg, fmtRest, parseNum, parseSecs, setShort, setText, timeUnit, fmtSecs, relDay, timeOfDay, plural,
   supersets, linkNext, unlink, barOf, platesText } from "../core.js";
-import { TIPS, videoUrl } from "../library.js";
+import { TIPS } from "../library.js";
 import { startActive, completeSet, uncompleteSet, current, addRest, skipRest, restLeft, tick, counts, toSession, addSet, removeSet,
   addExercise, removeExercise, moveExercise, lastDoneAt, noteFor, setNote, notesChanged, notesToSave,
   addWarmups, removeWarmups, warmCount, workIndex, swapExercise, retargetRest } from "../workout.js";
 import { unlock, scheduleCountdown, cancelCountdown, keepAwake, haptic, playFinish } from "../sound.js";
 import { NO, chooseRest } from "./common.js";
 import { openExercisePicker, openSwapPicker } from "./editors.js";
+import { openVideo } from "./video.js";
 import { showSummary } from "./summary.js";
 
 let root = null, mini = null, timer = null;
@@ -42,7 +43,6 @@ function platesLine(ex, w) {
   return bar && w ? platesText(w, bar, settings().plates) : "";
 }
 
-const openVideo = (name) => window.open(videoUrl(name), "_blank", "noopener");
 
 // ---------------------------------------------------------------------------
 // Starting, opening, closing
@@ -526,8 +526,7 @@ async function exerciseMenu(e) {
   const v = await actionSheet({
     title: name,
     actions: [
-      TIPS[x.ex] ? { text: "How to do it", value: "tip" } : null,
-      { text: "Watch how (video)", value: "video" },
+      { text: TIPS[x.ex] ? "How to do it (video)" : "Video", value: "video" },
       { text: "Swap for another exercise", value: "swap" },
       { text: "Add a set", value: "add" },
       kind === "weight" && !x.sets.some((st) => st.warm) ? { text: "Add warm-up sets", value: "warm" } : null,
@@ -540,12 +539,8 @@ async function exerciseMenu(e) {
       { text: "Remove from this workout", value: "remove", style: "destructive" },
     ].filter(Boolean),
   });
-  if (v === "tip") {
-    const w = await alertBox({ title: name, message: TIPS[x.ex], buttons: [{ text: "Watch a video", value: "video" }, { text: "OK", value: true, style: "bold" }] });
-    if (w === "video") openVideo(name);
-    return;
-  }
-  if (v === "video") { openVideo(name); return; }
+  // played here: no leaving the workout for YouTube
+  if (v === "video") { openVideo(x.ex, { name }); return; }
   if (v === "swap") { openSwap(e); return; }
   if (v === "warm") {
     if (!addWarmups(a, store.data, e)) {
@@ -584,7 +579,12 @@ function openSwap(e) {
   if (!x) return;
   const name = exerciseMap(store.data).get(x.ex)?.name || x.name;
   const done = x.sets.some((st) => st.done);
-  openSwapPicker({ exId: x.ex, exclude: a.exercises.map((b) => b.ex), dark: true,
+  const exMap = exerciseMap(store.data);
+  const workout = { name: a.name, lines: a.exercises.map((b, k) => {
+    const sets = b.sets.filter((st) => !st.warm), done = sets.filter((st) => st.done).length;
+    return `${k + 1}. ${exMap.get(b.ex)?.name || b.name}: ${sets.length} sets${done ? ` (${done} done)` : ""}`;
+  }) };
+  openSwapPicker({ exId: x.ex, exclude: a.exercises.map((b) => b.ex), dark: true, workout,
     intro: `The sets still to do go to the one you pick${done ? `; the sets done stay with ${name}` : ""}. Only for today: your plan stays the same.`,
     onPick: (id) => {
       if (!A()) return;

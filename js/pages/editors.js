@@ -1,14 +1,15 @@
 // Editing the plan: a workout (name, colour, days, rest, exercises), one exercise in it (sets, reps,
 // weight, its own rest), choosing exercises from the library, and the library itself.
 
-import { h, icon, sheet, group, caption, footer, alertBox, toast, segmented, stepper, selectOnFocus, tile, initials, switchRow, actionRow } from "../ui.js";
+import { h, icon, sheet, group, caption, footer, alertBox, toast, segmented, stepper, selectOnFocus, tile, initials, switchRow, actionRow, dragSort } from "../ui.js";
 import { store } from "../store.js";
 import { uid, MUSCLES, COLORS, KIND_LABELS, exerciseMap } from "../data.js";
-import { WEEKDAYS, WEEK_ORDER, fmtRest, fmtKg, kg, parseNum, timeUnit, fmtSecs, repRange, barOf, supersets, linkNext, alternatives, lastFor, relDay } from "../core.js";
+import { WEEKDAYS, WEEK_ORDER, fmtRest, fmtKg, kg, parseNum, timeUnit, fmtSecs, repRange, barOf, supersets, linkNext, alternatives, lastFor, relDay, moveItem } from "../core.js";
 import { TIPS } from "../library.js";
 import { openRecommended } from "./recommend.js";
 import { NO, chooseRest, setsLine } from "./common.js";
-import { openCoach } from "./coach.js";
+import { openCoach, openClaudeSwap } from "./coach.js";
+import { openVideo } from "./video.js";
 import { planReport } from "../coach.js";
 
 const KIND_ORDER = ["weight", "reps", "time"];
@@ -116,7 +117,7 @@ export function openExerciseEditor(exercise, { dark = false, name = "", onSaved 
   notes.value = ex.notes || "";
   notes.addEventListener("input", () => { ex.notes = notes.value; });
   showKind();
-  body.append(
+  body.append(...[
     caption("Exercise"), group(h("label", { class: "form-row" }, nameIn),
       h("label", { class: "form-row" }, h("span", { class: "form-label" }, "Muscle group"), muscleSel, icon("chevron", 14, "select-chev"))),
     caption("Logged as"), h("div", { class: "group", style: { padding: "10px" } },
@@ -129,7 +130,7 @@ export function openExerciseEditor(exercise, { dark = false, name = "", onSaved 
       const ok = await alertBox({ title: `Hide ${ex.name}?`, message: "It disappears from the lists. Workouts you've logged keep it, and you can show it again from the exercise list.",
         buttons: [NO, { text: "Hide", value: true, style: "destructive" }] });
       if (ok) { store.archiveExercise(ex.id, true); api.close(); toast(`${ex.name} hidden`); }
-    } }, "Hide this exercise") : null);
+    } }, "Hide this exercise") : null].filter(Boolean));
   const api = sheet({
     title: isNew ? "New exercise" : "Exercise", className: dark ? "dark-scope" : "",
     left: { text: "Cancel" },
@@ -186,7 +187,7 @@ export function openLibrary() {
 // ---------------------------------------------------------------------------
 /** Another exercise instead of one: the same movement first, then the same muscle group, then any (with
  *  search). Used in a workout (only for today) and in the plan (from now on). */
-export function openSwapPicker({ exId, exclude = [], dark = false, intro = "", onPick }) {
+export function openSwapPicker({ exId, exclude = [], dark = false, intro = "", workout = null, onPick }) {
   const data = store.data, ex = exerciseMap(data).get(exId), name = ex?.name || "this exercise";
   const { similar, same } = alternatives(data, exId, exclude);
   let api = null;
@@ -198,6 +199,8 @@ export function openSwapPicker({ exId, exclude = [], dark = false, intro = "", o
   };
   const body = h("div", { class: "form" },
     intro ? h("div", { class: "info-text", style: { padding: "8px 4px 0" } }, h("p", null, intro)) : null,
+    group(actionRow("sparkle", "Ask Claude for one that suits you", () => { api.close(); openClaudeSwap({ exId, exclude, workout, onPick }); },
+      { detail: "Tell it why: knee pain, the machine is taken…" })),
     similar.length ? [caption("Similar"), h("div", { class: "group" }, similar.map(row))] : null,
     same.length ? [caption(ex?.muscle ? `Other ${ex.muscle.toLowerCase()} exercises` : "Other exercises"), h("div", { class: "group" }, same.map(row))] : null,
     group(actionRow("search", "Another exercise", () => {
@@ -207,7 +210,7 @@ export function openSwapPicker({ exId, exclude = [], dark = false, intro = "", o
   api = sheet({ title: `Swap ${name}`, left: { text: "Cancel" }, body, className: dark ? "dark-scope" : "" });
 }
 
-function openItemEditor(item, workoutRest, { onSave, onRemove, onMove, onSwap = null, canUp, canDown, nextName = null, linked = false, onLink = null }) {
+function openItemEditor(item, workoutRest, { onSave, onRemove, onMove, onSwap = null, onAskClaude = null, canUp, canDown, nextName = null, linked = false, onLink = null }) {
   const ex = exerciseMap(store.data).get(item.ex);
   const kind = ex?.kind || "weight", unit = timeUnit(ex);
   const it = { ...item };
@@ -244,7 +247,9 @@ function openItemEditor(item, workoutRest, { onSave, onRemove, onMove, onSwap = 
   } }, h("span", { class: "action-text" }, "Rest"), restValue, icon("chevron", 15, "chev"));
   body.append(
     ...(onSwap ? [group(h("button", { type: "button", class: "action-row", onclick: () => { api.close(); onSwap(it); } },
-      icon("sync", 20, "row-icon"), h("span", { class: "action-text" }, "Swap for another exercise"), icon("chevron", 15, "chev")))] : []),
+      icon("sync", 20, "row-icon"), h("span", { class: "action-text" }, "Swap for another exercise"), icon("chevron", 15, "chev")),
+    onAskClaude ? actionRow("sparkle", "Ask Claude for an alternative", () => { api.close(); onAskClaude(it); }, { detail: "Tell it why, for example knee pain" }) : null,
+    actionRow("play", "How to do it (video)", () => openVideo(item.ex)))] : []),
     caption("Target"), group(rows),
     footer(kind === "time" ? "" : "Up to: the top of a rep range (8–12). When every set reaches it, the workout tells you to add weight. The weight is only a starting point: each set starts from what you lifted last time."),
     caption("Rest"), group(restRow),
@@ -304,6 +309,30 @@ export function openWorkoutEditor(workout = null) {
     presets);
 
   const items = h("div", { class: "group" });
+  // drag an exercise by its handle to another place
+  dragSort(items, { rows: ".item-row", handle: ".drag-handle", onDrop: (from, to, { keyboard }) => {
+    moveItem(w.items, from, to);
+    drawItems();
+    if (keyboard) items.querySelectorAll(".drag-handle")[to]?.focus();
+  } });
+  // what Claude is told about this workout when it suggests another exercise
+  const context = () => {
+    const exMap = exerciseMap(store.data);
+    return { name: w.name.trim() || "this", lines: w.items.map((it, k) => `${k + 1}. ${exMap.get(it.ex)?.name || it.ex}: ${itemLine(it, exMap.get(it.ex), w.rest)}`) };
+  };
+  const replace = (i, id) => {
+    const all = exerciseMap(store.data), was = all.get(w.items[i]?.ex), nx = all.get(id);
+    if (!w.items[i]) return;
+    const g = w.items[i].group;
+    const item = { ...w.items[i], ex: id, w: null };
+    if (g) item.group = g; else delete item.group;
+    const toTime = nx?.kind === "time", fromTime = was?.kind === "time";
+    if (toTime && !fromTime) { item.secs = timeUnit(nx) === "min" ? 1200 : 60; item.reps = null; item.hi = null; }
+    else if (fromTime && !toTime) { item.reps = 10; item.hi = null; item.secs = null; }
+    w.items[i] = item;
+    drawItems();
+    toast(`${nx?.name || "Swapped"} instead of ${was?.name || "the old one"}`);
+  };
   const drawItems = () => {
     const exMap = exerciseMap(store.data);
     const ss = supersets(w.items);
@@ -312,7 +341,7 @@ export function openWorkoutEditor(workout = null) {
     items.replaceChildren(...w.items.map((it, i) => {
       const ex = exMap.get(it.ex);
       const next = w.items[i + 1] ? exMap.get(w.items[i + 1].ex) : null;
-      return h("button", { type: "button", class: `item-row ${ss[i] ? "ss" : ""}`, onclick: () => openItemEditor(it, w.rest, {
+      const open = () => openItemEditor(it, w.rest, {
         canUp: i > 0, canDown: i < w.items.length - 1,
         nextName: next ? next.name : null, linked: Boolean(ss[i] && i < ss[i].end),
         onLink: (on) => { linkNext(w.items, i, on); drawItems(); },
@@ -321,26 +350,26 @@ export function openWorkoutEditor(workout = null) {
         onSwap: (n) => {
           w.items[i] = keepGroup(i, n);
           drawItems();
-          openSwapPicker({ exId: n.ex, exclude: w.items.map((x) => x.ex),
+          openSwapPicker({ exId: n.ex, exclude: w.items.map((x) => x.ex), workout: context(),
             intro: "It takes this one's place in the workout, with the same sets, reps and rest. Each set starts from what you lifted on it last time.",
-            onPick: (id) => {
-              const all = exerciseMap(store.data), was = all.get(n.ex), nx = all.get(id);
-              const item = keepGroup(i, { ...w.items[i], ex: id, w: null });
-              const toTime = nx?.kind === "time", fromTime = was?.kind === "time";
-              if (toTime && !fromTime) { item.secs = timeUnit(nx) === "min" ? 1200 : 60; item.reps = null; item.hi = null; }
-              else if (fromTime && !toTime) { item.reps = 10; item.hi = null; item.secs = null; }
-              w.items[i] = item;
-              drawItems();
-              toast(`${nx?.name || "Swapped"} instead of ${was?.name || "the old one"}`);
-            } });
+            onPick: (id) => replace(i, id) });
+        },
+        onAskClaude: (n) => {
+          w.items[i] = keepGroup(i, n);
+          drawItems();
+          openClaudeSwap({ exId: n.ex, exclude: w.items.map((x) => x.ex), workout: context(), onPick: (id) => replace(i, id) });
         },
         onRemove: () => { w.items.splice(i, 1); drawItems(); },
-        onMove: (by, n) => { w.items[i] = keepGroup(i, n); const [x] = w.items.splice(i, 1); w.items.splice(i + by, 0, x); drawItems(); },
-      }) },
-      h("span", { class: "item-num" }, String(i + 1)),
-      h("span", { class: "item-text" }, h("span", { class: "item-name" }, ex?.name || "Exercise"),
-        h("span", { class: "item-sub" }, ss[i] ? h("span", { class: "ss-tag" }, `Superset ${ss[i].label} · `) : null, itemLine(it, ex, w.rest))),
-      icon("chevron", 15, "chev"));
+        onMove: (by, n) => { w.items[i] = keepGroup(i, n); moveItem(w.items, i, i + by); drawItems(); },
+      });
+      const name = ex?.name || "Exercise";
+      return h("div", { class: `item-row ${ss[i] ? "ss" : ""}` },
+        h("button", { type: "button", class: "item-main", onclick: open },
+          h("span", { class: "item-num" }, String(i + 1)),
+          h("span", { class: "item-text" }, h("span", { class: "item-name" }, name),
+            h("span", { class: "item-sub" }, ss[i] ? h("span", { class: "ss-tag" }, `Superset ${ss[i].label} · `) : null, itemLine(it, ex, w.rest)))),
+        h("button", { type: "button", class: "item-video", "aria-label": `${name}: how to do it (video)`, onclick: () => openVideo(it.ex) }, icon("play", 15)),
+        h("span", { class: "drag-handle", role: "button", tabindex: "0", "aria-label": `Move ${name}: drag it, or use the arrow keys` }, icon("grip", 22)));
     }), h("button", { type: "button", class: "action-row", onclick: () => openExercisePicker({ title: `Add to ${w.name || "the workout"}`, exclude: w.items.map((x) => x.ex), onDone: (ids) => {
       const exMap2 = exerciseMap(store.data);
       for (const id of ids) { const ex = exMap2.get(id); if (ex) w.items.push(newItem(ex)); }
@@ -358,7 +387,8 @@ export function openWorkoutEditor(workout = null) {
       toast(`Started from ${rw.name}: change anything you like`);
     } }) }, icon("sparkle", 20, "row-icon"),
     h("span", { class: "action-text" }, "Start from a recommended workout", h("span", { class: "action-detail" }, "Exercises picked from the research, for each muscle group")), icon("chevron", 15, "chev"))) : null;
-  body.append(head, fromRec, caption("Name"), group(h("label", { class: "form-row" }, nameIn)),
+  // (parts that aren't there are left out: append() would write "null")
+  body.append(...[head, fromRec, caption("Name"), group(h("label", { class: "form-row" }, nameIn)),
     caption("Colour"), h("div", { class: "group" }, swatches),
     caption("Days"), h("div", { class: "group" }, dayChips), dayFoot,
     caption("Rest"), h("div", { class: "group" }, restRow),
@@ -374,7 +404,7 @@ export function openWorkoutEditor(workout = null) {
       store.deleteWorkout(w.id);
       api.close();
       toast(`${w.name} deleted`);
-    } }, "Delete workout") : null);
+    } }, "Delete workout") : null].filter(Boolean));
 
   api = sheet({
     title: isNew ? "New workout" : w.name || "Workout",

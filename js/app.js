@@ -158,6 +158,14 @@ if (store.active && store.ready) restoreLive();
 if (store.cloud) store.sync();
 // back in the app (a sync is cut off when the phone puts it away), or the connection is back
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && store.ready) store.syncIfStale(); });
+// back from another app (YouTube, the share sheet): draw the page again, so it can't come back blank; and a
+// copy of the page Safari kept frozen starts fresh (everything is saved, a workout in progress too)
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  document.body.style.opacity = "0.999";
+  requestAnimationFrame(() => requestAnimationFrame(() => { document.body.style.opacity = ""; }));
+});
+window.addEventListener("pageshow", (ev) => { if (ev.persisted) location.reload(); });
 window.addEventListener("online", () => { if (store.ready) store.syncIfStale(); });
 
 // after midnight: a new day, a new Today

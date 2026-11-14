@@ -10,7 +10,10 @@ Your gym week on your phone, in the same iOS look as the Savings Tracker and Glo
 - **The workout:** a clock for the whole workout, one big **Set done** button, then the rest counts down and beeps
   (and flashes) in its last 5 seconds so you're ready for the next set; weights start from last time
 - **In the gym:** warm-up sets for the first heavy lift, the plates for each side of the bar, supersets (one set of
-  each in turn, then rest), swap an exercise for a similar one when the machine is taken, a video of how to do it
+  each in turn, then rest), swap an exercise for a similar one when the machine is taken (or ask Claude for one
+  that suits a reason, like knee pain), a video of how to do it, played inside the app (your own YouTube link if you
+  like another one)
+- **Plan:** drag an exercise by its handle to reorder a workout; each exercise's video is a tap away
 - **Notes:** every exercise has its own notes (seat height, grip, what to try next), on its card in every workout;
   the summary and History keep what you wrote on the day
 - **Summary:** total time, volume, and every exercise against the last time, with new personal records
@@ -45,7 +48,7 @@ signal; a new version downloads in the background and a bar offers to switch to 
   app's own OneDrive folder) and `js/cloud/google.js` (Google Drive)
 - `js/sound.js`: the countdown beeps, keeping the screen on
 - `js/pages/`: Today, the workout screen (`live.js`), the summary, Plan and its editors, the recommendations
-  (`recommend.js`), History, Progress, Settings
+  (`recommend.js`), History, Progress, Settings, Ask Claude (`coach.js`) and an exercise's video (`video.js`)
 - `tests/`: checks for the data, the numbers, the workout, syncing and the OneDrive connection. Run `npm test`
   (Node 22+); GitHub runs them on every push
 
