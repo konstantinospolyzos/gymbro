@@ -58,12 +58,9 @@ export function stravaExercise(exId, ex) {
   return BY_MUSCLE[ex?.muscle] || "TOTAL_BODY_GENERIC";
 }
 
-/** 2026-11-16T17:30:00+01:00: the phone's own time with its offset from UTC */
-export function isoLocal(ms) {
-  const d = new Date(ms), off = -d.getTimezoneOffset();
-  const pad = (n) => String(Math.floor(Math.abs(n))).padStart(2, "0");
-  return `${new Date(ms + off * 60000).toISOString().slice(0, 19)}${off < 0 ? "-" : "+"}${pad(off / 60)}:${pad(off % 60)}`;
-}
+/** 2026-11-16T16:30:00Z: in UTC, to the second. Strava can't read a time with an offset ("+01:00": its
+ *  "Error Processing Data"); the offset goes in utc_offset instead. */
+export const isoUtc = (ms) => new Date(ms).toISOString().replace(/\.\d+Z$/, "Z");
 
 /** The file Strava gets: every set with its exercise, reps and kilos (or seconds for a timed one) */
 export function stravaFile(session, data) {
@@ -84,7 +81,7 @@ export function stravaFile(session, data) {
   }
   return {
     version: "1.0",
-    start_time: isoLocal(session.start),
+    start_time: isoUtc(session.start),
     utc_offset: -new Date(session.start).getTimezoneOffset() * 60,
     elapsed_time: Math.max(60, Math.round(session.dur || (session.end - session.start) / 1000) || 0),
     creator: { name: "GymBro" },

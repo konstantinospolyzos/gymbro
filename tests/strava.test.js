@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emptyData, applyOp, normalize, exerciseMap } from "../js/data.js";
-import { STRAVA_EXERCISE, stravaExercise, stravaFile, stravaDescription, musclesOf, setsText, isoLocal, duplicateOf, plainText } from "../js/strava.js";
+import { STRAVA_EXERCISE, stravaExercise, stravaFile, stravaDescription, musclesOf, setsText, isoUtc, duplicateOf, plainText } from "../js/strava.js";
 
 globalThis.process.env.TZ = "Europe/Stockholm";
 
@@ -119,7 +119,7 @@ test("every exercise in the library goes up as one of Strava's", () => {
   }
 });
 
-test("the file Strava gets: every set, the start in the phone's time, the length", () => {
+test("the file Strava gets: every set, the start in UTC with the phone's offset, the length", () => {
   const data = emptyData();
   const start = new Date(2026, 10, 16, 17, 30).getTime();
   const session = { id: "s1", date: "2026-11-16", start, end: start + 3480000, dur: 3480, name: "Back", exercises: [
@@ -129,7 +129,9 @@ test("the file Strava gets: every set, the start in the phone's time, the length
   ] };
   const f = stravaFile(session, data);
   assert.equal(f.version, "1.0");
-  assert.equal(f.start_time, "2026-11-16T17:30:00+01:00");
+  // UTC to the second: Strava can't read "+01:00" ("Error Processing Data")
+  assert.equal(f.start_time, "2026-11-16T16:30:00Z");
+  assert.match(f.start_time, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
   assert.equal(f.utc_offset, 3600);
   assert.equal(f.elapsed_time, 3480);
   assert.deepEqual(f.sets, [
@@ -139,7 +141,7 @@ test("the file Strava gets: every set, the start in the phone's time, the length
   ]);
   for (const s of f.sets) assert.ok(STRAVA.has(s.exercise_type));
   // summer time: the offset follows
-  assert.equal(isoLocal(new Date(2026, 6, 1, 7, 5, 9).getTime()), "2026-07-01T07:05:09+02:00");
+  assert.equal(isoUtc(new Date(2026, 6, 1, 7, 5, 9, 450).getTime()), "2026-07-01T05:05:09Z");
   assert.equal(stravaFile({ ...session, start: new Date(2026, 6, 1, 7).getTime() }, data).utc_offset, 7200);
 });
 
