@@ -228,13 +228,16 @@ async function api(path, init = {}, again = true) {
  *  read: it shows up on Strava soon). */
 async function upload(session) {
   const data = store.data;
+  // a new name each time: Strava ties a name to its first upload and answers a second one with that one's
+  // result, so a workout that failed once could never go up again (the mark in your data stops doubles)
+  const name = `gymbro-${session.id}-${Date.now().toString(36)}`;
   const form = new FormData();
-  form.append("file", new Blob([JSON.stringify(stravaFile(session, data))], { type: "application/json" }), `gymbro-${session.id}.json`);
+  form.append("file", new Blob([JSON.stringify(stravaFile(session, data))], { type: "application/json" }), `${name}.json`);
   form.append("data_type", "json");
   form.append("sport_type", "WeightTraining");
   form.append("name", session.name);
   form.append("description", stravaDescription(session, data));
-  form.append("external_id", `gymbro-${session.id}`);
+  form.append("external_id", name);
   const { r, j } = await api("/uploads", { method: "POST", body: form });
   if (!r.ok || j.error) {
     const dup = duplicateOf(j.error) || duplicateOf(j.message) || duplicateOf(JSON.stringify(j.errors || ""));
