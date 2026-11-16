@@ -7,7 +7,7 @@ import { exerciseMap } from "../data.js";
 import { longDate, today, isoDay, addDays, startOfWeek, WEEKDAYS, workoutForDay, expectedMinutes, workoutSets, lastFor, setShort, timeUnit,
   plural, fmtRest, streak, repRange, sessionStats, fmtDuration, fmtVolume, timeOfDay, clock, recordCounts, supersets } from "../core.js";
 import { counts } from "../workout.js";
-import { workoutTile, sessionCard, chooseRest, chooseWorkout, emptyState } from "./common.js";
+import { workoutTile, sessionCard, chooseRest, chooseWorkout, emptyState, restLabel, restForAll } from "./common.js";
 import { startWorkout, openLive } from "./live.js";
 import { openSessionDetail } from "./history.js";
 import { openWorkoutEditor } from "./editors.js";
@@ -37,12 +37,17 @@ export async function startOther(title = "Start a workout") {
 
 function workoutHero(data, w, label) {
   const est = expectedMinutes(data, w);
+  // the rest the exercises really get: each its own, else the workout's
   const restBtn = h("button", { type: "button", class: "meta-chip", "aria-label": "Change the rest between sets", onclick: async () => {
     const v = await chooseRest(w.rest, { title: `Rest between sets in ${w.name}` });
     if (v === null) return;
-    store.saveWorkout({ ...w, rest: v });
-    toast(`Rest ${fmtRest(v)}`);
-  } }, icon("timer", 15), `Rest ${fmtRest(w.rest)}`);
+    const exMap = exerciseMap(store.data);
+    const own = w.items.filter((it) => it.rest !== null && it.rest !== undefined).map((it) => ({ name: exMap.get(it.ex)?.name || "An exercise", rest: it.rest }));
+    const how = await restForAll(v, own);
+    if (!how) return;
+    store.saveWorkout({ ...w, rest: v, items: how === "all" ? w.items.map((it) => ({ ...it, rest: null })) : w.items });
+    toast(how === "all" && own.length ? `Rest ${fmtRest(v)} for every exercise` : `Rest ${fmtRest(v)}`);
+  } }, icon("timer", 15), `Rest ${restLabel(w.items.map((it) => it.rest ?? w.rest), w.rest)}`);
   return h("div", { class: "card hero-card" },
     h("span", { class: `hero-glow c-${w.color}` }),
     h("div", { class: "hero-top" }, workoutTile(w, 52),

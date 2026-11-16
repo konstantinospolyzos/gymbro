@@ -13,7 +13,7 @@ import { startActive, completeSet, uncompleteSet, current, addRest, skipRest, re
   addExercise, removeExercise, moveExercise, lastDoneAt, noteFor, setNote, notesChanged, notesToSave,
   addWarmups, removeWarmups, warmCount, workIndex, swapExercise, retargetRest, usualFor } from "../workout.js";
 import { unlock, scheduleCountdown, cancelCountdown, keepAwake, haptic, playFinish } from "../sound.js";
-import { NO, chooseRest } from "./common.js";
+import { NO, chooseRest, restLabel, restForAll } from "./common.js";
 import { openExercisePicker, openSwapPicker } from "./editors.js";
 import { openVideo } from "./video.js";
 import { showSummary } from "./summary.js";
@@ -310,7 +310,7 @@ function renderList() {
   els.barFill.style.width = `${total ? (done / total) * 100 : 0}%`;
   const head = h("div", { class: "card-head", style: { margin: "0 4px -2px" } },
     h("span", { class: "muted", style: { fontSize: "14px", fontWeight: "600" } }, total ? `${done} of ${plural(total, "set")} done` : "No exercises yet"),
-    h("button", { type: "button", class: "meta-chip", onclick: changeRest }, icon("timer", 15), `Rest ${fmtRest(a.rest)}`));
+    h("button", { type: "button", class: "meta-chip", onclick: changeRest }, icon("timer", 15), `Rest ${restLabel(a.exercises.map((x) => x.rest ?? a.rest), a.rest)}`));
   const ss = supersets(a.exercises);
   els.list.replaceChildren(head, ...a.exercises.map((x, e) => exerciseCard(x, e, cur, ss[e])),
     h("div", { class: "live-add" }, h("button", { type: "button", class: "btn gray", onclick: addExercises }, icon("plus", 18), "Add exercise")),
@@ -602,12 +602,18 @@ async function changeRest() {
   const a = A();
   const v = await chooseRest(a.rest, { title: `Rest between sets${a.workout ? ` (also saved to ${a.name})` : ""}` });
   if (v === null) return;
+  // exercises with a rest of their own keep it, unless it's for every exercise
+  const exMap = exerciseMap(store.data);
+  const own = a.exercises.filter((x) => x.rest !== null && x.rest !== undefined).map((x) => ({ name: exMap.get(x.ex)?.name || x.name, rest: x.rest }));
+  const how = await restForAll(v, own);
+  if (!how || A() !== a) return;
   a.rest = v;
+  if (how === "all") for (const x of a.exercises) x.rest = null;
   save();
   const w = store.data.workouts.find((x) => x.id === a.workout);
-  if (w && w.rest !== v) store.saveWorkout({ ...w, rest: v });
+  if (w) store.saveWorkout({ ...w, rest: v, items: how === "all" ? w.items.map((it) => ({ ...it, rest: null })) : w.items });
   render();
-  toast(`Rest ${fmtRest(v)}`);
+  toast(how === "all" && own.length ? `Rest ${fmtRest(v)} for every exercise` : `Rest ${fmtRest(v)}`);
 }
 
 async function exerciseMenu(e) {

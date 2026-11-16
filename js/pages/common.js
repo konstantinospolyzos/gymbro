@@ -1,6 +1,6 @@
 // Pieces several pages share: a workout's tile, a logged workout's card, sets as text, choosers.
 
-import { h, icon, tile, initials, actionSheet, chip } from "../ui.js";
+import { h, icon, tile, initials, actionSheet, alertBox, chip } from "../ui.js";
 import { store } from "../store.js";
 import { exerciseMap } from "../data.js";
 import { relDay, fmtDuration, fmtVolume, sessionStats, setShort, timeUnit, plural, recordCounts, fmtRest, workoutSets, fmtNum } from "../core.js";
@@ -59,6 +59,26 @@ export async function chooseWorkout(title = "Start a workout", { recommended = f
 }
 
 export const REST_CHOICES = [0, 30, 45, 60, 75, 90, 120, 150, 180, 240, 300];
+
+/** The rest a workout's exercises get (each its own, else the workout's): "2 min", or "1:15–2:30" when they differ */
+export function restLabel(rests, fallback) {
+  const v = [...new Set(rests.length ? rests : [fallback])].sort((a, b) => a - b);
+  if (v.length < 2) return fmtRest(v[0]);
+  const [lo, hi] = [v[0], v.at(-1)];
+  return lo >= 60 && lo % 60 === 0 && hi % 60 === 0 ? `${lo / 60}–${hi / 60}\u00a0min` : `${fmtRest(lo)}–${fmtRest(hi)}`;
+}
+
+/**
+ * A new rest for a whole workout. Exercises with a rest of their own (own: [{name, rest}]) would keep it, so
+ * when some differ: for every exercise, or only for the others? "all" | "keep" | false (cancelled)
+ */
+export async function restForAll(v, own) {
+  const differ = own.filter((o) => o.rest !== v);
+  if (!differ.length) return "keep";
+  const names = differ.slice(0, 3).map((o) => `${o.name} ${fmtRest(o.rest)}`).join(", ") + (differ.length > 3 ? ` and ${differ.length - 3} more` : "");
+  return alertBox({ title: `${fmtRest(v)} for every exercise?`, message: `Some have a rest of their own: ${names}.`,
+    buttons: [{ text: "Every exercise", value: "all", style: "bold" }, { text: "Keep their own rests", value: "keep" }, { text: "Cancel", value: false, style: "cancel" }] });
+}
 
 /** Pick a rest time; resolves to seconds or null */
 export async function chooseRest(current, { title = "Rest between sets", extra = null } = {}) {
