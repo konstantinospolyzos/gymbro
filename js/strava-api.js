@@ -10,7 +10,7 @@
 import { store } from "./store.js";
 import { lsGet, lsSet, lsDel, NetworkError } from "./cloud/common.js";
 import { key } from "./profiles.js";
-import { stravaFile, stravaDescription, duplicateOf, plainText } from "./strava.js";
+import { stravaFile, stravaDescription, stravaTitle, duplicateOf, plainText } from "./strava.js";
 
 const WWW = "https://www.strava.com";
 const API = `${WWW}/api/v3`;
@@ -235,7 +235,7 @@ async function upload(session) {
   form.append("file", new Blob([JSON.stringify(stravaFile(session, data))], { type: "application/json" }), `${name}.json`);
   form.append("data_type", "json");
   form.append("sport_type", "WeightTraining");
-  form.append("name", session.name);
+  form.append("name", stravaTitle(session, data));
   form.append("description", stravaDescription(session, data));
   form.append("external_id", name);
   const { r, j } = await api("/uploads", { method: "POST", body: form });

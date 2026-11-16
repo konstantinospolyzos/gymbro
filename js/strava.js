@@ -99,6 +99,16 @@ export function musclesOf(session, data) {
   return [...m].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1] || at(a[0]) - at(b[0])).map(([muscle, sets]) => ({ muscle, sets }));
 }
 
+/** The activity's title: "Weight Training: Legs". A workout without a name of its own (an empty workout)
+ *  gets its main muscles instead: "Weight Training: Chest, Shoulders & Triceps". */
+export function stravaTitle(session, data) {
+  const name = String(session.name || "").trim();
+  if (name && name !== "Workout") return `Weight Training: ${name}`;
+  const top = musclesOf(session, data).slice(0, 3).map((m) => m.muscle);
+  if (!top.length) return "Weight Training";
+  return `Weight Training: ${top.length > 1 ? `${top.slice(0, -1).join(", ")} & ${top.at(-1)}` : top[0]}`;
+}
+
 const n1 = (v) => fmtNum(v, v % 1 ? 1 : 0);
 
 /** One exercise's sets in a few words: "60 kg × 10, 10 · 57.5 kg × 9", "12, 10 reps", "1:00, 0:45" */

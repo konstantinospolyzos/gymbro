@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emptyData, applyOp, normalize, exerciseMap } from "../js/data.js";
-import { STRAVA_EXERCISE, stravaExercise, stravaFile, stravaDescription, musclesOf, setsText, isoUtc, duplicateOf, plainText } from "../js/strava.js";
+import { STRAVA_EXERCISE, stravaExercise, stravaFile, stravaDescription, stravaTitle, musclesOf, setsText, isoUtc, duplicateOf, plainText } from "../js/strava.js";
 
 globalThis.process.env.TZ = "Europe/Stockholm";
 
@@ -165,6 +165,10 @@ test("the description: the sets per muscle, then each exercise's sets", () => {
   assert.equal(lines[4], "Dips: 12 reps · +10 kg × 8");
   assert.equal(lines[5], `Treadmill: ${setsText(session.exercises[3], "min")}`);
   assert.ok(!/\u00a0/.test(text), "plain spaces only");
+  // the title: the workout's name, or its main muscles when it has none of its own
+  assert.equal(stravaTitle(session, data), "Weight Training: Push");
+  assert.equal(stravaTitle({ ...session, name: "Workout" }, data), `Weight Training: ${muscles.slice(0, 2).map((m) => m.muscle).join(", ")} & ${muscles[2].muscle}`);
+  assert.equal(stravaTitle({ ...session, name: "Workout", exercises: session.exercises.slice(3) }, data), "Weight Training");
   // the exercise's name as you have it in GymBro
   const renamed = applyOp(data, { type: "putExercise", exercise: { ...exerciseMap(data).get("ex-dips"), name: "Parallel bar dips" } });
   assert.match(stravaDescription(session, renamed), /^Parallel bar dips: /m);
