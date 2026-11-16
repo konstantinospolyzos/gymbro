@@ -131,7 +131,7 @@ export function stravaSettings(rebuild) {
       toast("Strava disconnected");
       rebuild();
     }, { tone: "danger" })));
-  parts.push(footer(`${stravaProblem() ? `${stravaProblem()} ` : ""}Automatically: each workout goes up when you finish it, as a Weight Training activity with every set, so Strava shows the exercises, the volume and its muscle map. The description lists the hard sets per muscle and each exercise. Without a signal it goes up once you're back online.`));
+  parts.push(footer(`${stravaProblem() ? `${stravaProblem()} ` : ""}Automatically: each workout goes up when you finish it, as a Weight Training activity with every set, so Strava shows the exercises, the volume and its muscle map. The description has the hard sets per muscle. Without a signal it goes up once you're back online.`));
   return parts;
 }
 

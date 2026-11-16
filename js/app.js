@@ -9,7 +9,8 @@ import { renderWelcome } from "./pages/welcome.js";
 import { openSettings, applyTheme } from "./pages/settings.js";
 import { restoreLive, openLive } from "./pages/live.js";
 import { openWorkoutEditor } from "./pages/editors.js";
-import { isoDay } from "./core.js";
+import { isoDay, APP_VERSION } from "./core.js";
+import { APP_NAME } from "./data.js";
 import { startUpdates } from "./update.js";
 import { startStrava } from "./pages/strava.js";
 import { profiles, current as currentProfile } from "./profiles.js";
@@ -104,7 +105,9 @@ function render() {
     h("h1", { class: "large-title" }, tab.title),
     h("div", { class: "subtitle" }, subtitle),
     showPill ? statusPill : null,
-    ...content.filter(Boolean)));
+    ...content.filter(Boolean),
+    // the version, at the very bottom of every tab
+    h("div", { class: "app-version" }, `${APP_NAME} ${APP_VERSION}`)));
   addBtn.hidden = !ADD_LABELS[current];
   addBtn.setAttribute("aria-label", ADD_LABELS[current] || "Add");
   buildTabbar();

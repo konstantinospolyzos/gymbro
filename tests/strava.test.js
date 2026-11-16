@@ -1,9 +1,9 @@
 // Strava (js/strava.js): every exercise goes up as one Strava knows, every set with its reps and kilos, the
-// times with the phone's offset, and the description with the sets per muscle.
+// start in UTC with the phone's offset, and a description with only the sets per muscle.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { emptyData, applyOp, normalize, exerciseMap } from "../js/data.js";
-import { STRAVA_EXERCISE, stravaExercise, stravaFile, stravaDescription, stravaTitle, musclesOf, setsText, isoUtc, duplicateOf, plainText } from "../js/strava.js";
+import { emptyData, applyOp, normalize } from "../js/data.js";
+import { STRAVA_EXERCISE, stravaExercise, stravaFile, stravaDescription, stravaTitle, musclesOf, isoUtc, duplicateOf, plainText } from "../js/strava.js";
 
 globalThis.process.env.TZ = "Europe/Stockholm";
 
@@ -145,7 +145,7 @@ test("the file Strava gets: every set, the start in UTC with the phone's offset,
   assert.equal(stravaFile({ ...session, start: new Date(2026, 6, 1, 7).getTime() }, data).utc_offset, 7200);
 });
 
-test("the description: the sets per muscle, then each exercise's sets", () => {
+test("the description is only the sets per muscle; the title is the workout's", () => {
   const data = emptyData();
   const session = { id: "s2", start: Date.now(), dur: 3000, name: "Push", exercises: [
     { ex: "ex-bench-press", name: "Bench press", kind: "weight", muscle: "Chest", sets: [{ w: 80, r: 8 }, { w: 80, r: 8 }, { w: 77.5, r: 7 }] },
@@ -157,21 +157,15 @@ test("the description: the sets per muscle, then each exercise's sets", () => {
   assert.deepEqual(muscles.map((m) => m.muscle).slice(0, 2), ["Chest", "Shoulders"]);
   assert.ok(!muscles.some((m) => m.muscle === "Cardio"), "cardio counts no muscle");
   const text = stravaDescription(session, data);
-  const lines = text.split("\n");
-  assert.match(lines[0], /^Sets per muscle: Chest 5 · Shoulders /);
-  assert.equal(lines[1], "");
-  assert.equal(lines[2], "Bench press: 80 kg × 8, 8 · 77.5 kg × 7");
-  assert.equal(lines[3], "Lateral raise: 10 kg × 15, 12");
-  assert.equal(lines[4], "Dips: 12 reps · +10 kg × 8");
-  assert.equal(lines[5], `Treadmill: ${setsText(session.exercises[3], "min")}`);
-  assert.ok(!/\u00a0/.test(text), "plain spaces only");
+  assert.equal(text, `Sets per muscle: ${muscles.map((m) => `${m.muscle} ${m.sets}`).join(" · ")}`);
+  assert.match(text, /^Sets per muscle: Chest 5 · Shoulders /);
+  assert.ok(!/\n|kg|Bench press/.test(text), "no exercises or kilos");
+  // only cardio: no muscles, no description
+  assert.equal(stravaDescription({ ...session, exercises: session.exercises.slice(3) }, data), "");
   // the title: the workout's name, or its main muscles when it has none of its own
   assert.equal(stravaTitle(session, data), "Weight Training: Push");
   assert.equal(stravaTitle({ ...session, name: "Workout" }, data), `Weight Training: ${muscles.slice(0, 2).map((m) => m.muscle).join(", ")} & ${muscles[2].muscle}`);
   assert.equal(stravaTitle({ ...session, name: "Workout", exercises: session.exercises.slice(3) }, data), "Weight Training");
-  // the exercise's name as you have it in GymBro
-  const renamed = applyOp(data, { type: "putExercise", exercise: { ...exerciseMap(data).get("ex-dips"), name: "Parallel bar dips" } });
-  assert.match(stravaDescription(session, renamed), /^Parallel bar dips: /m);
 });
 
 test("Strava's answers: duplicates and HTML", () => {

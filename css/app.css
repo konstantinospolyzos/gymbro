@@ -883,3 +883,6 @@ button.meta-chip:active { opacity: 0.6; }
 .strava-pick.failed .pick-kind { color: var(--orange); }
 .strava-pick.done .pick-kind, .strava-ok { color: var(--green); }
 .strava-wait { color: var(--gray); animation: strava-pulse 1.2s ease-in-out infinite; }
+
+/* the version at the bottom of each tab */
+.app-version { text-align: center; font-size: 12px; color: var(--blue); padding: 26px 0 6px; letter-spacing: 0.02em; }

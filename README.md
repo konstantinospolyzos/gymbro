@@ -29,7 +29,7 @@ Your gym week on your phone, in the same iOS look as the Savings Tracker and Glo
   and you see each workout's changes and choose what to use, with undo): in the Claude app, or right in GymBro with
   your own Anthropic API key (Settings › Claude)
 - **Strava:** each workout goes up when you finish it as a Weight Training activity with every set (Strava shows
-  the exercises, the volume and its muscle map), with the hard sets per muscle and each exercise in the description;
+  the exercises, the volume and its muscle map), with the hard sets per muscle in the description;
   workouts from before go up from Settings › Strava or History. Without a signal it waits until you're back online.
   You make your own Strava API app once (Settings › Strava walks you through it; Strava asks for a subscription)
 - **Export:** every set, or your body weight, as CSV for Excel or Python

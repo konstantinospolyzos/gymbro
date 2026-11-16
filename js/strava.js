@@ -1,10 +1,9 @@
 // What a workout looks like on Strava: a Weight Training activity with every set (Strava then shows the
-// exercises, the volume and its muscle map), and a description with the hard sets per muscle and each
-// exercise's sets. Strava's upload format for strength training: developers.strava.com/docs/uploads
+// exercises, the volume and its muscle map), and a one-line description with the hard sets per muscle. Strava's upload format for strength training: developers.strava.com/docs/uploads
 // ("JSON - Strength Training"). js/strava-api.js sends it.
 
 import { exerciseMap } from "./data.js";
-import { volumeOf, fmtKg, fmtNum, fmtSecs, timeUnit } from "./core.js";
+import { volumeOf, fmtNum } from "./core.js";
 import { VOLUME_MUSCLES } from "./library.js";
 
 /** Each exercise in the library as Strava knows it: its exercise_type from Strava's supported exercises */
@@ -111,29 +110,10 @@ export function stravaTitle(session, data) {
 
 const n1 = (v) => fmtNum(v, v % 1 ? 1 : 0);
 
-/** One exercise's sets in a few words: "60 kg × 10, 10 · 57.5 kg × 9", "12, 10 reps", "1:00, 0:45" */
-export function setsText(entry, unit = "sec") {
-  if (entry.kind === "time") return entry.sets.map((s) => fmtSecs(s.s || 0, unit)).join(", ").replace(/\u00a0/g, " ");
-  const runs = [];
-  for (const s of entry.sets) {
-    const w = s.w > 0 ? s.w : 0, last = runs.at(-1);
-    if (last && last.w === w) last.reps.push(s.r || 0); else runs.push({ w, reps: [s.r || 0] });
-  }
-  const added = entry.kind === "reps";
-  return runs.map((r) => (r.w ? `${added ? "+" : ""}${fmtKg(r.w)} kg × ${r.reps.join(", ")}` : `${r.reps.join(", ")} reps`))
-    .join(" · ").replace(/ /g, " ");
-}
-
-/** The activity's description: the sets per muscle, then each exercise with its sets */
+/** The activity's description: just the sets per muscle (Strava shows the exercises and kilos itself) */
 export function stravaDescription(session, data) {
-  const exMap = exerciseMap(data);
   const muscles = musclesOf(session, data);
-  const lines = muscles.length ? [`Sets per muscle: ${muscles.map((m) => `${m.muscle} ${n1(m.sets)}`).join(" · ")}`, ""] : [];
-  for (const e of session.exercises) {
-    const ex = exMap.get(e.ex) || e;
-    lines.push(`${ex.name || e.name}: ${setsText(e, timeUnit(ex))}`);
-  }
-  return lines.join("\n").replace(/ /g, " ");
+  return muscles.length ? `Sets per muscle: ${muscles.map((m) => `${m.muscle} ${n1(m.sets)}`).join(" · ")}` : "";
 }
 
 /** Strava's answers can be HTML: just the words */
