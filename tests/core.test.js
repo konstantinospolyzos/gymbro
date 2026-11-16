@@ -148,8 +148,8 @@ test("the recommended workouts and weeks are complete", async () => {
   let d = applyOp(emptyData(), { type: "putWorkout", workout: { id: "mine", name: "My back", color: "blue", rest: 90, items: [] } });
   d = applyOp(d, { type: "setDay", day: 0, workout: "mine" });
   d = applyOp(d, weekOp("ul4", d));
-  assert.deepEqual(d.schedule, { 1: "rec-upper", 2: "rec-lower", 4: "rec-upper", 5: "rec-lower" });
-  assert.deepEqual(d.workouts.map((w) => w.id), ["mine", "rec-upper", "rec-lower"]);
+  assert.deepEqual(d.schedule, { 1: "wk-upper-a", 2: "wk-lower-a", 4: "wk-upper-b", 5: "wk-lower-b" });
+  assert.deepEqual(d.workouts.map((w) => w.id), ["mine", "wk-upper-a", "wk-lower-a", "wk-upper-b", "wk-lower-b"]);
   assert.deepEqual(applyOp(d, weekOp("ul4", d)), d);
 });
 

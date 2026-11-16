@@ -855,3 +855,11 @@ body.has-mini #update-bar { bottom: calc(var(--tab-h) + var(--safe-b) + 80px); }
 .alt-tip .icon { flex: none; margin-top: 2px; color: var(--blue); }
 .alt-buttons { display: flex; gap: 10px; margin-top: 12px; }
 .alt-buttons .btn { flex: 1; min-height: 44px; padding: 10px 14px; }
+
+/* Recommend a week: what each muscle gets */
+.week-sum { margin: 12px 0 10px; font-size: 15px; line-height: 1.4; }
+.week-vol { margin-bottom: 14px; }
+.week-vol .mv-row.low .mv-value b { color: var(--orange); }
+.plan-volume .card-title { margin-bottom: 12px; }
+.plan-volume .week-vol { margin-bottom: 0; }
+.mv-note.warn { color: var(--orange); }

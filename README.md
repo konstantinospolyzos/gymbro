@@ -5,7 +5,9 @@ Your gym week on your phone, in the same iOS look as the Savings Tracker and Glo
 - **Plan:** a workout for each day (Monday: back, with its exercises, sets, reps and the rest between sets)
 - **Recommended:** a ready workout for each muscle group (back, chest, shoulders, arms, legs, glutes & hamstrings, core)
   and for push/pull/legs, upper/lower and full-body weeks, with the exercises the research rates best for a fully
-  equipped gym; or a whole week picked for the number of days you can train
+  equipped gym; or a whole week for the 3 to 6 days you can train. Every week gives each muscle at least 10 hard sets
+  (the least that builds muscle), and more with more days (3 days about 10–12, 4 days 12–14, 5 days 14–17, 6 days
+  16–19, never over 20); a test checks it
 - **Today:** today's workout, one tap to start
 - **The workout:** a clock for the whole workout, one big **Set done** button, then the rest counts down and beeps
   (and flashes) in its last 5 seconds so you're ready for the next set; weights start from last time

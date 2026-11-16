@@ -9,8 +9,9 @@ import { key } from "../profiles.js";
 import { askClaude, firstMessage, forClaudeApp, blocks, inline, weekReport, planMessage, forClaudeAppPlan, askClaudePlan, planFromText, proposal,
   planSignature, altMessage, forClaudeAppAlt, askClaudeAlternatives, alternativesFrom, jsonFromText } from "../coach.js";
 import { openVideo } from "./video.js";
-import { shortDate, repRange, fmtRest, fmtSecs, timeUnit, WEEKDAYS, WEEK_ORDER } from "../core.js";
-import { NO, workoutTile } from "./common.js";
+import { shortDate, repRange, fmtRest, fmtSecs, timeUnit, WEEKDAYS, WEEK_ORDER, weekMuscles, today, fmtNum } from "../core.js";
+import { VOLUME_MUSCLES } from "../library.js";
+import { NO, workoutTile, volumeBars } from "./common.js";
 
 // the key is the phone's (every profile here uses it); the answers are each profile's own
 const KEY_API = "gym.claudeKey";
@@ -303,6 +304,22 @@ export function openPlanCoach() {
       const shown = saved.applied ? p.changes.filter((c) => saved.applied.ids.includes(c.old.id)) : p.changes;
       for (const ch of shown) parts.push(changeCard(ch, saved.applied || picked.has(ch.old.id), (v) => { if (v) picked.add(ch.old.id); else picked.delete(ch.old.id); draw(); }, Boolean(saved.applied) || stale));
       if (p.same.length) parts.push(footer(`No changes: ${p.same.join(", ")}.`));
+      // what each muscle gets a week with the changes you picked: every one should be 10 or more
+      if (!saved.applied && !stale && p.changes.length) {
+        const withPicked = { ...store.data, workouts: store.data.workouts.map((w) => {
+          const c = p.changes.find((x) => x.old.id === w.id);
+          return c && picked.has(w.id) ? c.next : w;
+        }) };
+        const rows = weekMuscles(withPicked, today()).filter((r) => VOLUME_MUSCLES.includes(r.muscle));
+        const low = rows.filter((r) => r.planned < 10);
+        const n = (v) => fmtNum(v, v % 1 ? 1 : 0);
+        parts.push(h("div", { class: "card plan-volume" },
+          h("div", { class: "card-title" }, "Sets per muscle a week with these changes"),
+          volumeBars(rows),
+          h("div", { class: `mv-note ${low.length ? "warn" : ""}` }, low.length
+            ? `Under 10 a week: ${low.map((r) => `${r.muscle} ${n(r.planned)}`).join(", ")}. Ask Claude to fix it below, or add sets yourself.`
+            : "Every muscle gets 10 or more hard sets a week: the least that builds muscle.")));
+      }
       if (!saved.applied && !stale && p.changes.length) {
         const n = p.changes.filter((c) => picked.has(c.old.id)).length;
         parts.push(h("button", { type: "button", class: "btn primary wide big", disabled: !n, onclick: apply },

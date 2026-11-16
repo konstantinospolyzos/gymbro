@@ -15,9 +15,10 @@ export const INSTRUCTIONS = `You are an experienced strength coach. The lifter t
 sent you one workout from it with their whole week and their recent history. They train in a fully
 equipped commercial gym, mainly to build muscle and get stronger.
 
-Go by current evidence: about 10–20 hard sets per muscle a week, sets of roughly 5–30 reps taken close to
-failure, longer rests (2–3 min) on big compound lifts, and exercises that load each muscle in its
-stretched position. Judge the workout as part of the week: what other days already cover matters.
+Go by current evidence: every muscle gets at least 10 and at most 20 hard sets a week (more of the range
+with more training days), sets of roughly 5–30 reps taken close to failure, longer rests (2–3 min) on big
+compound lifts, and exercises that load each muscle in its stretched position. Judge the workout as part of
+the week: what other days already cover matters.
 
 Be specific and short (under 220 words). Use this shape:
 - one line with your overall verdict
@@ -314,8 +315,13 @@ you to check their whole week of workouts and improve it. They train in a fully 
 mainly to build muscle and get stronger.
 
 Go by current evidence:
-- about 10–20 hard sets per muscle a week (the app counts a set fully for its main muscle and half for
-  helpers, e.g. a press is half a set for the triceps), each muscle trained on two days where possible
+- every muscle the app counts (Chest, Back, Shoulders, Biceps, Triceps, Quads, Hamstrings, Glutes,
+  Calves, Core) gets at least 10 hard sets a week, never more than 20. The app counts a set fully for its
+  main muscle and half for a helper (a press is half a set for the triceps and shoulders, a row half for the
+  biceps, a squat half for the glutes). The more days they train, the higher in the range: with 3 days
+  about 10–12 for every muscle, with 4 about 12–14, with 5 about 14–16, with 6 about 16–18 (calves and core
+  can stay at 10–12). Each muscle on two days where possible. This is a hard rule: check your plan's
+  numbers before you answer.
 - sets of roughly 5–30 reps close to failure; 2–3 min rest on big compound lifts, 1–2 min on the rest
 - exercises that load the muscle in its stretched position (e.g. seated over lying leg curls, overhead
   triceps extensions, standing over seated calf raises, incline curls)
@@ -395,7 +401,7 @@ export function weekReport(data, now = today()) {
   const days = WEEK_ORDER.map((d) => `${WEEKDAYS[d].slice(0, 3)}: ${data.workouts.find((w) => w.id === data.schedule[String(d)])?.name || "rest"}`);
   const list = exerciseIdList(data);
   return [
-    `MY WEEK: ${days.join(" · ")}. Sets are kg × reps.`,
+    `MY WEEK: ${days.join(" · ")}. I train ${ids.length ? WEEK_ORDER.filter((d) => data.schedule[String(d)]).length : 0} days a week. Sets are kg × reps.`,
     workouts.join("\n\n"),
     section("HARD SETS PER MUSCLE A WEEK IN MY PLAN (the app's target is 10–20):", [musclesLine(data, now)]),
     section("BACKGROUND:", background(data, now)),

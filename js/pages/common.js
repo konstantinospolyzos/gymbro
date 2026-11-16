@@ -3,7 +3,7 @@
 import { h, icon, tile, initials, actionSheet, chip } from "../ui.js";
 import { store } from "../store.js";
 import { exerciseMap } from "../data.js";
-import { relDay, fmtDuration, fmtVolume, sessionStats, setShort, timeUnit, plural, recordCounts, fmtRest, workoutSets } from "../core.js";
+import { relDay, fmtDuration, fmtVolume, sessionStats, setShort, timeUnit, plural, recordCounts, fmtRest, workoutSets, fmtNum } from "../core.js";
 
 export const NO = { text: "Cancel", value: false, style: "cancel" };
 
@@ -70,4 +70,16 @@ export async function chooseRest(current, { title = "Rest between sets", extra =
 export function emptyState(iconName, title, text, ...buttons) {
   return h("div", { class: "card empty-state" }, icon(iconName, 40, "empty-icon"), h("div", { class: "empty-title" }, title),
     h("div", { class: "empty-text" }, text), ...buttons);
+}
+
+/** Each muscle's sets a week against the 10–20 that builds muscle */
+export function volumeBars(rows) {
+  const max = 24, at = (v) => `${(Math.min(v, max) / max) * 100}%`;
+  const n = (v) => fmtNum(v, v % 1 ? 1 : 0);
+  return h("div", { class: "mv-rows week-vol", role: "list" }, rows.map((r) => h("div", { class: `mv-row ${r.planned < 10 ? "low" : ""}`, role: "listitem",
+    "aria-label": `${r.muscle}: ${n(r.planned)} sets a week` },
+    h("span", { class: "mv-label" }, r.muscle),
+    h("span", { class: "mv-track" }, h("span", { class: "mv-band", style: { left: at(10), width: `calc(${at(20)} - ${at(10)})` } }),
+      h("span", { class: "mv-plan", style: { left: at(r.planned) } })),
+    h("span", { class: "mv-value num" }, h("b", null, n(r.planned))))));
 }

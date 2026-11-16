@@ -8,11 +8,14 @@
 //   set and the app tells you to add weight next time.
 
 /** A short name for small spaces (the week grid) */
-const SHORT = { "Glutes & hamstrings": "Glutes", "Upper body": "Upper", "Lower body": "Lower", "Full body A": "Full A", "Full body B": "Full B" };
+const SHORT = { "Glutes & hamstrings": "Glutes", "Upper body": "Upper", "Lower body": "Lower", "Full body A": "Full A", "Full body B": "Full B",
+  "Full body C": "Full C" };
 
-/** [exercise id, sets, reps from, reps to, rest seconds] */
+/** [exercise id, sets, reps from, reps to, rest seconds, superset] (exercises with the same superset letter are
+ *  done in turn, then rest) */
 const W = (id, name, group, color, rest, focus, items) => ({ id, name, short: SHORT[name] || name, group, color, rest, focus,
-  items: items.map(([ex, sets, reps, hi, r], i) => ({ id: `${id}-${i + 1}`, ex: `ex-${ex}`, sets, reps, hi, w: null, secs: null, rest: r })) });
+  items: items.map(([ex, sets, reps, hi, r, ss], i) => ({ id: `${id}-${i + 1}`, ex: `ex-${ex}`, sets, reps, hi, w: null, secs: null, rest: r,
+    ...(ss ? { group: `${id}-${ss}` } : {}) })) });
 
 export const RECOMMENDED = [
   // one muscle group each
@@ -60,42 +63,97 @@ export const RECOMMENDED = [
 export const GROUPS = ["Back", "Chest", "Shoulders", "Arms", "Legs", "Glutes & hamstrings", "Core", "Splits"];
 export const GROUP_LABELS = { Splits: "For weeks with several muscle groups a day" };
 
-export const recommendedById = (id) => RECOMMENDED.find((r) => r.id === id) || null;
+/**
+ * The workouts of the recommended weeks. Each week gives every muscle at least 10 hard sets (the least that
+ * builds muscle, as the app counts them: 1 for the muscle an exercise is for, ½ for a helper), and more with
+ * more days: 3 days about 10–12, 4 days 12–14, 5 days 14–17, 6 days 16–19, never over 20. Small muscles go in
+ * supersets (calves with abs, curls with triceps), so each workout stays around an hour.
+ */
+export const WEEK_WORKOUTS = [
+  W("wk-full-a", "Full body A", "Week", "teal", 150, "Squat, bench press, pulldowns and Romanian deadlifts; then curls with triceps, and calves with abs.", [
+    ["squat", 4, 6, 10, 180], ["bench-press", 4, 6, 10, 150], ["lat-pulldown", 4, 8, 12, 120], ["romanian-deadlift", 3, 8, 10, 150],
+    ["incline-dumbbell-curl", 3, 8, 12, 90, "a"], ["overhead-cable-extension", 2, 10, 12, 90, "a"],
+    ["standing-calf-raise", 3, 10, 15, 60, "b"], ["hanging-leg-raise", 3, 10, 15, 60, "b"]]),
+  W("wk-full-b", "Full body B", "Week", "indigo", 120, "Leg press, incline press, rows, hip thrusts and leg curls; then side delts with triceps, and calves with abs.", [
+    ["leg-press", 3, 8, 12, 150], ["incline-dumbbell-press", 3, 8, 12, 120], ["chest-supported-row", 3, 8, 12, 120], ["hip-thrust", 3, 8, 12, 120],
+    ["seated-leg-curl", 3, 10, 12, 90], ["cable-lateral-raise", 2, 10, 15, 60, "a"], ["triceps-pushdown", 2, 10, 15, 60, "a"],
+    ["calf-raise", 3, 10, 15, 60, "b"], ["cable-crunch", 3, 10, 15, 60, "b"]]),
+  W("wk-full-c", "Full body C", "Week", "purple", 120, "Hack squat, shoulder and chest presses, cable rows and leg curls; then curls with hip abduction, and calves with abs.", [
+    ["hack-squat", 3, 8, 12, 150], ["dumbbell-shoulder-press", 3, 8, 12, 120], ["chest-press-machine", 3, 8, 12, 120], ["seated-cable-row", 3, 10, 12, 90],
+    ["seated-leg-curl", 3, 10, 12, 90], ["bayesian-curl", 2, 10, 12, 60, "a"], ["hip-abduction", 2, 12, 20, 60, "a"],
+    ["standing-calf-raise", 4, 10, 15, 60, "b"], ["ab-wheel", 4, 8, 12, 60, "b"]]),
+  W("wk-upper-a", "Upper A", "Week", "indigo", 120, "Bench press, pulldowns, incline press and rows; then side delts with triceps, and curls with abs.", [
+    ["bench-press", 3, 6, 10, 150], ["lat-pulldown", 3, 8, 12, 120], ["incline-dumbbell-press", 3, 8, 12, 120], ["chest-supported-row", 3, 8, 12, 120],
+    ["cable-lateral-raise", 3, 10, 15, 60, "a"], ["overhead-cable-extension", 3, 10, 12, 60, "a"],
+    ["incline-dumbbell-curl", 3, 8, 12, 60, "b"], ["cable-crunch", 2, 10, 15, 60, "b"]]),
+  W("wk-lower-a", "Lower A", "Week", "green", 150, "Squat and Romanian deadlift, then leg extensions, leg curls and hip thrusts; calves with abs.", [
+    ["squat", 4, 6, 10, 180], ["romanian-deadlift", 3, 8, 10, 150], ["leg-extension", 3, 10, 15, 90], ["seated-leg-curl", 3, 10, 12, 90],
+    ["hip-thrust", 3, 8, 12, 120], ["standing-calf-raise", 5, 10, 15, 60, "a"], ["hanging-leg-raise", 4, 10, 15, 60, "a"]]),
+  W("wk-upper-b", "Upper B", "Week", "purple", 120, "Shoulder press, machine chest press, cable rows and one-arm pulldowns; then flies with rear delts, and curls with triceps.", [
+    ["dumbbell-shoulder-press", 3, 8, 12, 120], ["chest-press-machine", 3, 8, 12, 120], ["seated-cable-row", 3, 10, 12, 90], ["single-arm-pulldown", 3, 10, 12, 90],
+    ["seated-cable-fly", 3, 12, 15, 60, "a"], ["reverse-pec-deck", 2, 12, 15, 60, "a"],
+    ["bayesian-curl", 3, 10, 12, 60, "b"], ["triceps-pushdown", 3, 10, 15, 60, "b"]]),
+  W("wk-lower-b", "Lower B", "Week", "teal", 150, "Hack squat, hip thrusts and Romanian deadlifts, then leg curls and leg extensions; calves with abs.", [
+    ["hack-squat", 3, 8, 12, 150], ["hip-thrust", 3, 8, 12, 120], ["romanian-deadlift", 2, 8, 10, 150], ["seated-leg-curl", 3, 10, 12, 90],
+    ["leg-extension", 2, 10, 15, 90], ["calf-raise", 5, 10, 15, 60, "a"], ["ab-wheel", 4, 8, 12, 60, "a"]]),
+  W("wk-push-a", "Push A", "Week", "red", 120, "Chest, shoulders and triceps: bench press, incline press and shoulder press; flies with side delts, and two triceps exercises.", [
+    ["bench-press", 4, 6, 10, 150], ["incline-dumbbell-press", 3, 8, 12, 120], ["dumbbell-shoulder-press", 3, 8, 12, 120],
+    ["seated-cable-fly", 2, 12, 15, 60, "a"], ["cable-lateral-raise", 3, 10, 15, 60, "a"],
+    ["overhead-cable-extension", 3, 10, 12, 60, "b"], ["triceps-pushdown", 2, 10, 15, 60, "b"]]),
+  W("wk-pull-a", "Pull A", "Week", "blue", 120, "Back, rear delts and biceps: pulldowns and two rows; rear delts with curls, and hammer curls with abs.", [
+    ["lat-pulldown", 4, 8, 12, 120], ["chest-supported-row", 3, 8, 12, 120], ["seated-cable-row", 3, 10, 12, 90],
+    ["reverse-pec-deck", 2, 12, 15, 60, "a"], ["incline-dumbbell-curl", 3, 8, 12, 60, "a"],
+    ["hammer-curl", 2, 10, 12, 60, "b"], ["hanging-leg-raise", 2, 10, 15, 60, "b"]]),
+  W("wk-legs-a", "Legs A", "Week", "green", 150, "Squat, Romanian deadlift and leg press, then leg curls and hip thrusts; calves with abs.", [
+    ["squat", 4, 6, 10, 180], ["romanian-deadlift", 4, 8, 10, 150], ["leg-press", 3, 8, 12, 150], ["seated-leg-curl", 3, 10, 12, 90],
+    ["hip-thrust", 3, 8, 12, 120], ["standing-calf-raise", 5, 10, 15, 60, "a"], ["hanging-leg-raise", 3, 10, 15, 60, "a"]]),
+  W("wk-push-b", "Push B", "Week", "pink", 120, "Incline bench and machine chest press; crossovers with side delts, and triceps with abs.", [
+    ["incline-bench-press", 3, 6, 10, 150], ["chest-press-machine", 3, 8, 12, 120],
+    ["cable-crossover", 2, 12, 15, 60, "a"], ["lateral-raise", 2, 12, 20, 60, "a"],
+    ["overhead-triceps-extension", 3, 10, 12, 60, "b"], ["cable-crunch", 3, 10, 15, 60, "b"]]),
+  W("wk-pull-b", "Pull B", "Week", "indigo", 120, "Pull-ups, T-bar rows and one-arm pulldowns; face pulls with curls, and calves with abs.", [
+    ["pull-up", 3, 6, 10, 150], ["t-bar-row", 3, 8, 12, 120], ["single-arm-pulldown", 2, 10, 12, 90],
+    ["face-pull", 2, 12, 15, 60, "a"], ["bayesian-curl", 3, 10, 12, 60, "a"],
+    ["standing-calf-raise", 3, 10, 15, 60, "b"], ["ab-wheel", 2, 8, 12, 60, "b"]]),
+  W("wk-legs-b", "Legs B", "Week", "teal", 150, "Hack squat, Romanian deadlift, hip thrusts and split squats, then leg curls; leg extensions with calves.", [
+    ["hack-squat", 4, 8, 12, 150], ["romanian-deadlift", 3, 8, 10, 150], ["hip-thrust", 3, 8, 12, 120], ["bulgarian-split-squat", 2, 8, 12, 120],
+    ["seated-leg-curl", 3, 10, 12, 90], ["leg-extension", 3, 10, 15, 90, "a"], ["calf-raise", 4, 10, 15, 60, "a"]]),
+];
+
+export const recommendedById = (id) => RECOMMENDED.find((r) => r.id === id) || WEEK_WORKOUTS.find((r) => r.id === id) || null;
 
 /** A recommended workout as a workout of your own (same id: its history stays linked if you add it later) */
 export function asWorkout(rec) {
   return { id: rec.id, name: rec.name, color: rec.color, rest: rec.rest, items: rec.items.map((it) => ({ ...it })) };
 }
 
-/** Recommended weeks. schedule: JavaScript weekday (0 Sunday … 6 Saturday) -> recommended workout */
+/** Recommended weeks, from 3 days (fewer can't give every muscle 10 hard sets without two-hour workouts).
+ *  schedule: JavaScript weekday (0 Sunday … 6 Saturday) -> workout */
 export const WEEKS = [
-  { id: "full2", days: 2, name: "Full body, 2 days", text: "Every muscle twice a week in two workouts: the most you get from two gym days.",
-    schedule: { 1: "rec-full-a", 4: "rec-full-b" } },
-  { id: "full3", days: 3, name: "Full body, 3 days", text: "Every muscle three times a week, alternating A and B. Lots of results per hour in the gym.",
-    schedule: { 1: "rec-full-a", 3: "rec-full-b", 5: "rec-full-a" } },
-  { id: "ppl3", days: 3, name: "Push, pull, legs", text: "Chest-shoulders-triceps, back-biceps, then legs: one day each.",
-    schedule: { 1: "rec-push", 3: "rec-pull", 5: "rec-legs" } },
-  { id: "ul4", days: 4, name: "Upper / lower", text: "Every muscle twice a week. Research favours training a muscle at least twice a week once you do more than about 10 sets for it.",
-    schedule: { 1: "rec-upper", 2: "rec-lower", 4: "rec-upper", 5: "rec-lower" } },
-  { id: "split5", days: 5, name: "One muscle group a day", text: "Monday back, Tuesday chest, Wednesday legs, Thursday shoulders, Friday arms: each muscle gets a full workout of its own.",
-    schedule: { 1: "rec-back", 2: "rec-chest", 3: "rec-legs", 4: "rec-shoulders", 5: "rec-arms" } },
-  { id: "ppl6", days: 6, name: "Push, pull, legs, twice", text: "Every muscle twice a week with plenty of sets, for six gym days. Saturday is a second leg day for glutes and hamstrings.",
-    schedule: { 1: "rec-push", 2: "rec-pull", 3: "rec-legs", 4: "rec-push", 5: "rec-pull", 6: "rec-glutes" } },
+  { id: "full3", days: 3, name: "Full body, 3 days", text: "Every muscle three times a week, in three different full-body workouts: the least that builds muscle, for each one.",
+    schedule: { 1: "wk-full-a", 3: "wk-full-b", 5: "wk-full-c" } },
+  { id: "ul4", days: 4, name: "Upper / lower", text: "Upper body twice and lower body twice: every muscle trained twice a week.",
+    schedule: { 1: "wk-upper-a", 2: "wk-lower-a", 4: "wk-upper-b", 5: "wk-lower-b" } },
+  { id: "ulppl5", days: 5, name: "Upper / lower + push, pull, legs", text: "Upper and lower body early in the week, then push, pull and legs: every muscle twice a week, with more sets.",
+    schedule: { 1: "wk-upper-a", 2: "wk-lower-a", 4: "wk-push-a", 5: "wk-pull-a", 6: "wk-legs-a" } },
+  { id: "ppl6", days: 6, name: "Push, pull, legs, twice", text: "Push, pull and legs, twice, with different exercises each time: the most sets, near the top of the range.",
+    schedule: { 1: "wk-push-a", 2: "wk-pull-a", 3: "wk-legs-a", 4: "wk-push-b", 5: "wk-pull-b", 6: "wk-legs-b" } },
 ];
 
-/** The weeks for a number of gym days, the recommended one first */
+/** The weeks for a number of gym days (3 to 6) */
 export function weeksFor(days) {
-  const list = WEEKS.filter((w) => w.days === days);
-  return list.length ? list : WEEKS.filter((w) => w.days === Math.min(6, Math.max(2, days)));
+  return WEEKS.filter((w) => w.days === Math.min(6, Math.max(3, days)));
 }
 
-/** A week as one change: its workouts (the ones you don't have yet) and the days they're on */
-export function weekOp(weekId, data = null) {
-  const week = WEEKS.find((w) => w.id === weekId);
-  const ids = [...new Set(Object.values(week.schedule))];
+/** A plan as one change: its workouts (the ones you don't have yet) and the days they're on */
+export function planOp(schedule, data = null) {
+  const ids = [...new Set(Object.values(schedule))];
   const have = new Set((data?.workouts || []).map((w) => w.id));
-  return { type: "setWeek", workouts: ids.filter((id) => !have.has(id)).map((id) => asWorkout(recommendedById(id))), schedule: { ...week.schedule } };
+  return { type: "setWeek", workouts: ids.filter((id) => !have.has(id)).map((id) => asWorkout(recommendedById(id))), schedule: { ...schedule } };
 }
+
+/** A recommended week as one change */
+export const weekOp = (weekId, data = null) => planOp(WEEKS.find((w) => w.id === weekId).schedule, data);
 
 /** How to do each exercise, and why it's in the workouts */
 export const TIPS = {
@@ -125,6 +183,11 @@ export const TIPS = {
   "ex-seated-leg-curl": "Sit tall and lean slightly forward: the bend at the hip stretches the hamstrings. In a 12-week study, seated curls grew the hamstrings more than lying curls.",
   "ex-leg-extension": "Use the full range and let the knees bend deeply at the bottom: training the deep range grew the quads about twice as much in one study.",
   "ex-standing-calf-raise": "Pause at the bottom in the stretch, then rise. Reps in the bottom half grew the calves about twice as much as full reps in one study, so never cut the stretch short.",
+  "ex-calf-raise": "On the leg press with the knees straight, the balls of the feet on the bottom edge of the platform. Let the heels sink into a deep stretch, pause, then push as high as you can.",
+  "ex-incline-bench-press": "Bench at about 30°, shoulder blades pulled together, bar to the upper chest, press up. Like incline dumbbells, it puts more of the work on the upper chest.",
+  "ex-cable-crossover": "Pulleys high, a step forward, arms wide and slightly bent: let the cables pull the arms back until the chest stretches, then bring the hands together low in front of you.",
+  "ex-overhead-triceps-extension": "One dumbbell held in both hands overhead, elbows pointing up: lower it behind your head into a deep stretch, then straighten the arms. Overhead work trains the triceps' long head where it's stretched.",
+  "ex-t-bar-row": "Chest up, a slight bend in the knees, back flat: pull the handles to your lower chest, then let the shoulder blades travel forward at the bottom. With a chest pad, it's a chest-supported row.",
   "ex-hip-thrust": "Upper back on a bench, bar on the hips: push up until the hips are straight and squeeze. In a 9-week study it built the glutes as well as squats, with less thigh.",
   "ex-bulgarian-split-squat": "Back foot on a bench, lean slightly forward and go deep (sets are per leg): a big stretch for the glutes and quads.",
   "ex-hip-abduction": "Push the knees out against the pads: the side glutes, which squats and thrusts barely reach.",

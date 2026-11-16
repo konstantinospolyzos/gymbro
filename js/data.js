@@ -3,7 +3,7 @@
 // replayed on the newest cloud copy when the app syncs, so the phone and the computer never
 // overwrite each other's workouts.
 
-import { weekOp, youTubeId } from "./library.js";
+import { planOp, youTubeId } from "./library.js";
 
 export const APP_NAME = "GymBro";
 export const DATA_VERSION = 1;
@@ -119,9 +119,10 @@ export function emptyData() {
     exercises: libraryExercises(), workouts: [], schedule: {}, sessions: [], body: [] };
 }
 
-/** The sample week (one muscle group a day, from the recommended workouts) as one change */
+/** A sample plan for trying things out (and for the tests): a muscle group a day, Monday to Friday, from the
+ *  recommended workouts. Not a recommended week: those are in library.js (WEEKS) */
 export function sampleOp(data) {
-  return weekOp("split5", data);
+  return planOp({ 1: "rec-back", 2: "rec-chest", 3: "rec-legs", 4: "rec-shoulders", 5: "rec-arms" }, data);
 }
 
 // ---------------------------------------------------------------------------

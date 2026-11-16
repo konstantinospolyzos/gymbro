@@ -4,10 +4,11 @@
 
 import { h, icon, sheet, caption, footer, toast, alertBox, tile, initials, chip, segmented } from "../ui.js";
 import { store } from "../store.js";
-import { exerciseMap } from "../data.js";
-import { RECOMMENDED, GROUPS, GROUP_LABELS, TIPS, RESEARCH, recommendedById, asWorkout, weeksFor, weekOp } from "../library.js";
-import { WEEKDAYS, WEEK_ORDER, fmtRest, plural, workoutSets, expectedMinutes, repRange, plannedDays, timeUnit, fmtSecs } from "../core.js";
+import { exerciseMap, applyOp } from "../data.js";
+import { RECOMMENDED, GROUPS, GROUP_LABELS, TIPS, RESEARCH, VOLUME_MUSCLES, recommendedById, asWorkout, weeksFor, weekOp } from "../library.js";
+import { WEEKDAYS, WEEK_ORDER, fmtRest, plural, workoutSets, expectedMinutes, repRange, plannedDays, timeUnit, fmtSecs, weekMuscles, fmtNum, today } from "../core.js";
 import { startWorkout } from "./live.js";
+import { volumeBars } from "./common.js";
 
 const meta = (data, w) => {
   const est = expectedMinutes(data, w);
@@ -126,16 +127,27 @@ export function openResearch() {
   sheet({ title: "Why these exercises", right: { text: "Done", bold: true, onClick: (a) => a.close() }, body });
 }
 
-/** Pick a week: how many days, then the recommended week (and the other options) */
+/** What a week gives you, as it would be with your workouts: hard sets per muscle (counted like the Progress
+ *  card) and how long its workouts take */
+function weekNumbers(week) {
+  const after = applyOp(store.data, weekOp(week.id, store.data));
+  const rows = weekMuscles(after, today()).filter((r) => VOLUME_MUSCLES.includes(r.muscle));
+  const mins = [...new Set(Object.values(week.schedule))].map((id) => expectedMinutes(after, after.workouts.find((w) => w.id === id)).minutes);
+  return { rows, lo: Math.min(...rows.map((r) => r.planned)), hi: Math.max(...rows.map((r) => r.planned)), minLo: Math.min(...mins), minHi: Math.max(...mins) };
+}
+
+/** Pick a week: how many days, then the week for them. Every week gives each muscle at least 10 hard sets a
+ *  week, and the big muscles more with more days. */
 export function openWeekRecommender() {
   const data = store.data;
-  const choices = [2, 3, 4, 5, 6];
-  let days = choices.includes(plannedDays(data)) ? plannedDays(data) : 5;
+  const choices = [3, 4, 5, 6];
+  let days = choices.includes(plannedDays(data)) ? plannedDays(data) : 4;
   const slot = h("div");
   const body = h("div", { class: "form" },
     caption("How many days a week can you train?"),
     h("div", { class: "group", style: { padding: "10px" } }, segmented(choices.map(String), choices.indexOf(days), (i) => { days = choices[i]; draw(); }, "full")),
     slot,
+    footer("Each week gives every muscle at least 10 hard sets (the least that builds muscle), and the more days, the higher it goes towards 20. Two days can't reach 10 for every muscle without two-hour workouts, so the weeks start at three."),
     footer("Your own workouts stay in Plan; only the days change. Everything can be changed afterwards."));
   let api = null;
 
@@ -159,10 +171,15 @@ export function openWeekRecommender() {
           r ? h("span", { class: `dot c-${r.color}` }) : h("span", { class: "dot rest-dot" }),
           h("span", { class: "week-name" }, r ? r.short : "Rest"));
       }));
+      const v = weekNumbers(week);
+      const sets = (x) => fmtNum(x, x % 1 ? 1 : 0);
       return h("div", { class: "card week-card" },
         h("div", { class: "card-head", style: { marginBottom: "4px" } }, h("div", { class: "card-title" }, week.name), i === 0 && weeksFor(days).length > 1 ? chip("Recommended", "info") : null),
         h("div", { class: "rec-text", style: { textAlign: "left" } }, week.text),
         grid,
+        h("div", { class: "week-sum" }, h("b", null, v.lo >= 10 ? `Every muscle ${sets(v.lo)}–${sets(v.hi)} hard sets a week` : `${sets(v.lo)}–${sets(v.hi)} hard sets a week`),
+          h("span", { class: "muted" }, ` · about ${v.minLo === v.minHi ? v.minLo : `${v.minLo}–${v.minHi}`} min a workout`)),
+        volumeBars(v.rows),
         h("button", { type: "button", class: `btn ${i === 0 ? "primary" : "tinted"} wide`, onclick: () => use(week) }, "Use this week"));
     }));
   }

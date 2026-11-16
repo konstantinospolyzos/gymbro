@@ -4,7 +4,7 @@
 import { exerciseMap, bySessionStart, uid, DEFAULT_SETTINGS } from "./data.js";
 import { PATTERN, BARBELL, VOLUME, VOLUME_MUSCLES } from "./library.js";
 
-export const APP_VERSION = "1.11";
+export const APP_VERSION = "1.12";
 
 // ---------------------------------------------------------------------------
 // Dates (local time; a workout's "date" is the day it started)
@@ -404,9 +404,20 @@ export const repRange = (it) => (it.hi ? `${it.reps}–${it.hi}` : `${it.reps ??
 export function expectedMinutes(data, workout) {
   const past = data.sessions.filter((s) => s.workout === workout.id && s.dur > 300).slice(-3).map((s) => s.dur).sort((a, b) => a - b);
   if (past.length) return { minutes: Math.round(past[Math.floor(past.length / 2)] / 60), usual: true };
-  // about a minute a set (setting up and lifting), its rest, and five minutes to warm up
+  // about a minute a set (setting up and lifting), its rest, and five minutes to warm up; a superset rests
+  // once a round (its longest rest), the way the workout runs it
   let secs = 300;
-  for (const it of workout.items) secs += it.sets * (60 + (it.rest ?? workout.rest));
+  const ss = supersets(workout.items);
+  workout.items.forEach((it, i) => {
+    const rest = (x) => x.rest ?? workout.rest;
+    const g = ss[i];
+    if (!g) { secs += it.sets * (60 + rest(it)); return; }
+    secs += it.sets * 60;
+    if (g.pos === 0) {
+      const round = workout.items.slice(g.start, g.end + 1);
+      secs += Math.max(...round.map((x) => x.sets)) * Math.max(...round.map(rest));
+    }
+  });
   return { minutes: Math.max(5, Math.round(secs / 300) * 5), usual: false };
 }
 
