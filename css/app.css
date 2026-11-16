@@ -862,3 +862,24 @@ button.meta-chip:active { opacity: 0.6; }
 .editor-volume { border-radius: 12px; padding: 14px 16px; }
 .editor-volume .week-vol { margin-bottom: 0; }
 .mv-note.warn { color: var(--orange); }
+
+/* ---------- Strava ---------- */
+.btn.strava { background: #FC4C02; color: #fff; }
+.btn.strava:active { opacity: 0.8; }
+.copy-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 50px; padding: 8px 14px 8px 16px; text-align: left; }
+.copy-row:active { background: var(--fill); }
+.copy-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.copy-label { font-size: 12.5px; color: var(--gray); }
+.copy-value { font-size: 16px; overflow-wrap: anywhere; }
+.copy-icon { color: var(--blue); flex: none; }
+.action-row.warn { color: var(--orange); }
+.strava-row[hidden] { display: none; }
+.strava-done .row-icon { color: var(--green); }
+.strava-busy { color: var(--label); }
+.strava-busy .row-icon { color: var(--gray); animation: strava-pulse 1.2s ease-in-out infinite; }
+@keyframes strava-pulse { 50% { opacity: 0.35; } }
+.sum-strava { margin-top: 14px; }
+.strava-pick:disabled { opacity: 1; }
+.strava-pick.failed .pick-kind { color: var(--orange); }
+.strava-pick.done .pick-kind, .strava-ok { color: var(--green); }
+.strava-wait { color: var(--gray); animation: strava-pulse 1.2s ease-in-out infinite; }

@@ -28,6 +28,10 @@ Your gym week on your phone, in the same iOS look as the Savings Tracker and Glo
   did, or on your whole week (Plan › Ask Claude to check my week: Claude proposes better exercises, order and sets,
   and you see each workout's changes and choose what to use, with undo): in the Claude app, or right in GymBro with
   your own Anthropic API key (Settings › Claude)
+- **Strava:** each workout goes up when you finish it as a Weight Training activity with every set (Strava shows
+  the exercises, the volume and its muscle map), with the hard sets per muscle and each exercise in the description;
+  workouts from before go up from Settings › Strava or History. Without a signal it waits until you're back online.
+  You make your own Strava API app once (Settings › Strava walks you through it; Strava asks for a subscription)
 - **Export:** every set, or your body weight, as CSV for Excel or Python
 - **Profiles:** more than one person on a phone, each with their own plan, workouts, body weight and settings, and
   their own OneDrive or Google Drive sign-in (the first profile keeps `gymbro.json`; Anna's is `gymbro-anna.json`)
@@ -38,7 +42,8 @@ signal; a new version downloads in the background and switches over by itself at
 workout).
 
 - `index.html`, `css/`, `js/`: the app (plain JavaScript modules, no build step)
-- `auth.html`: where Microsoft's sign-in comes back to (it hands the one-time code to the app)
+- `auth.html`: where Microsoft's sign-in comes back to (it hands the one-time code to the app); `strava.html` the same
+  for Strava
 - `js/config.js`: your OneDrive Application (client) ID, and the Google sign-in (the Savings Tracker's; see SETUP.md)
 - `js/data.js`: the data file (exercise library, workouts, the week, logged workouts) and the changes made to it
 - `js/core.js`: the numbers: estimated one-rep max (Epley), records, comparisons with last time, weeks and streaks
@@ -47,6 +52,8 @@ workout).
   and what each exercise is (its movement, bar and the muscles a set counts for)
 - `js/profiles.js`: the profiles on the phone and what each keeps (its storage names and its cloud file)
 - `js/coach.js`: what Claude is told about a workout, its instructions, and asking it (`js/pages/coach.js`: the sheet)
+- `js/strava.js`: a workout as Strava gets it (each exercise as one of Strava's, every set, the description);
+  `js/strava-api.js`: connecting, uploading and the queue (`js/pages/strava.js`: the setup, Settings and the rows)
 - `js/csv.js`: the CSV export; `js/update.js`: new versions, switched to at a quiet moment; `sw.js`: the offline copy of the app (its
   `VERSION` is the app's version: change both for a new version)
 - `js/store.js`: syncing, offline queue, weekly backup in the cloud; `js/cloud/onedrive.js` (Microsoft Graph, the
@@ -54,7 +61,7 @@ workout).
 - `js/sound.js`: the countdown beeps, keeping the screen on
 - `js/pages/`: Today, the workout screen (`live.js`), the summary, Plan and its editors, the recommendations
   (`recommend.js`), History, Progress, Settings, Ask Claude (`coach.js`) and an exercise's video (`video.js`)
-- `tests/`: checks for the data, the numbers, the workout, syncing and the OneDrive connection. Run `npm test`
+- `tests/`: checks for the data, the numbers, the workout, syncing, the OneDrive connection and what Strava gets. Run `npm test`
   (Node 22+); GitHub runs them on every push
 
 Setup: see SETUP.md.

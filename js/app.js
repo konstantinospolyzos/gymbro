@@ -11,6 +11,7 @@ import { restoreLive, openLive } from "./pages/live.js";
 import { openWorkoutEditor } from "./pages/editors.js";
 import { isoDay } from "./core.js";
 import { startUpdates } from "./update.js";
+import { startStrava } from "./pages/strava.js";
 import { profiles, current as currentProfile } from "./profiles.js";
 import { profileMenu } from "./pages/profiles.js";
 
@@ -155,6 +156,7 @@ applyTheme();
 store.load();
 render();
 if (store.active && store.ready) restoreLive();
+startStrava();
 if (store.cloud) store.sync();
 // back in the app (a sync is cut off when the phone puts it away), or the connection is back
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && store.ready) store.syncIfStale(); });

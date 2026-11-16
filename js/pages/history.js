@@ -12,6 +12,7 @@ import { summaryContent } from "./summary.js";
 import { openExercisePicker } from "./editors.js";
 import { openCoach } from "./coach.js";
 import { sessionReport } from "../coach.js";
+import { stravaRow } from "./strava.js";
 
 let calMonth = null;          // the month the calendar shows (its first day)
 let shown = 30;               // workouts in the list before "Show more"
@@ -104,7 +105,8 @@ export function openSessionDetail(session) {
           report: () => sessionReport(store.data, { ...cur, feel: feel || undefined, notes: notes.trim() || undefined }) });
       }, { detail: "Feedback on the sets you did, against the plan and the last times" }),
       h("button", { type: "button", class: "action-row", onclick: () => { api.close(); openSessionEditor(store.data.sessions.find((x) => x.id === session.id) || session); } },
-        icon("edit", 20, "row-icon"), h("span", { class: "action-text" }, "Change sets, date or time"), icon("chevron", 15, "chev"))),
+        icon("edit", 20, "row-icon"), h("span", { class: "action-text" }, "Change sets, date or time"), icon("chevron", 15, "chev")),
+      stravaRow(session.id)),
     h("button", { type: "button", class: "btn destructive-row", onclick: async () => {
       const ok = await alertBox({ title: `Delete this ${session.name}?`, message: `${longDate(parseDay(session.date))}. It's removed from your history and progress.`,
         buttons: [NO, { text: "Delete", value: true, style: "destructive" }] });

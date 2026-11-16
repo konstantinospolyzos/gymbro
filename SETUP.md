@@ -123,6 +123,21 @@ Tap **Continue with Microsoft**. A Microsoft window opens: sign in, and allow *G
 - **Progress:** workouts a week against your goal (and your streak), volume and time per week, sets per muscle group,
   your newest records, and every exercise's best set over time.
 
+## 4. Strava (optional, once)
+
+GymBro can put each workout on Strava as a Weight Training activity with every set (Strava then shows the exercises,
+the volume and the muscles you trained). Strava only lets apps upload through your own API app, and asks for a Strava
+subscription to make one.
+
+1. In GymBro: **Settings → Strava → Set up Strava**. It shows what to type at Strava, with copy buttons.
+2. Open **strava.com/settings/api** (the button does it), sign in and create an app: *Application Name* GymBro,
+   any category, *Website* `https://konstantinospolyzos.github.io/gymbro/`, *Authorization Callback Domain*
+   `konstantinospolyzos.github.io`. Strava then asks for an icon: any picture works.
+3. Copy the app's **Client ID** and **Client Secret** into GymBro (they stay on the phone) and tap
+   **Connect with Strava**. Sign in, keep *Upload your activities* ticked and tap *Authorize*.
+4. GymBro offers to upload your earlier workouts: choose which. From then on each workout goes up when you finish it
+   (Settings → Strava → *Upload automatically*), and History has *Upload to Strava* for any workout.
+
 ## Good to know
 
 - **Signing in again:** Microsoft keeps web apps signed in for 24 hours, then asks again. The app keeps a copy on the

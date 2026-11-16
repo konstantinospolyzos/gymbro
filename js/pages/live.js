@@ -17,6 +17,7 @@ import { NO, chooseRest } from "./common.js";
 import { openExercisePicker, openSwapPicker } from "./editors.js";
 import { openVideo } from "./video.js";
 import { showSummary } from "./summary.js";
+import { afterWorkout } from "./strava.js";
 
 let root = null, mini = null, timer = null;
 const els = {};
@@ -700,6 +701,7 @@ async function finish() {
   const session = toSession(a, store.data, end);
   store.saveSession(session);
   store.saveActive(null);
+  afterWorkout(session);
   closeLive();
   if (settings().sound) playFinish();
   showSummary(store.data.sessions.find((x) => x.id === session.id) || session, { fresh: true });

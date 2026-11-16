@@ -13,6 +13,7 @@ import { redirectUri } from "../cloud/onedrive.js";
 import { testSound, soundWorks } from "../sound.js";
 import { NO, chooseRest } from "./common.js";
 import { openLibrary } from "./editors.js";
+import { stravaSettings } from "./strava.js";
 import { apiKey, setApiKey, editApiKey } from "./coach.js";
 
 const dayText = (ms) => new Date(ms).toLocaleDateString([], { day: "numeric", month: "short" });
@@ -149,6 +150,8 @@ export function openSettings() {
     parts.push(footer(ck
       ? "Ask Claude (in Plan › a workout, and after a workout) answers right here. Each answer costs a few cents on your Anthropic account. The key stays on this phone, and every profile here uses it."
       : "Ask Claude (in Plan › a workout, and after a workout) opens the Claude app with your workout, ready to send. With an Anthropic API key (console.anthropic.com, paid separately from a Claude plan: a few cents an answer) the answer comes right here instead."));
+
+    parts.push(...stravaSettings(build));
 
     parts.push(caption("Backup"));
     parts.push(group(

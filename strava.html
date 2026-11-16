@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Connecting Strava…</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box;
+      font: 17px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; text-align: center;
+      background: #F2F2F7; color: #1C1C1E; }
+    @media (prefers-color-scheme: dark) { body { background: #000; color: #fff; } #code { background: #1C1C1E; } }
+    .sub { color: #8E8E93; font-size: 15px; margin-top: 6px; }
+    #paste { display: none; margin-top: 22px; max-width: 340px; }
+    #code { font: 15px/1.4 ui-monospace, Menlo, monospace; word-break: break-all; background: #fff; border-radius: 12px; padding: 12px 14px; margin: 12px 0; user-select: all; -webkit-user-select: all; }
+    button { font: inherit; font-weight: 600; color: #fff; background: #FC4C02; border: 0; border-radius: 12px; padding: 12px 22px; }
+  </style>
+</head>
+<body>
+  <div>
+    <div id="msg">Connecting Strava…</div><div class="sub" id="sub"></div>
+    <div id="paste">
+      <div class="sub">GymBro didn't get Strava's answer by itself. Copy this code, go back to GymBro and paste it there:</div>
+      <div id="code"></div>
+      <button type="button" id="copy">Copy the code</button>
+    </div>
+  </div>
+  <script>
+    // Strava sends you back here with a one-time code. Hand it to GymBro and close; if GymBro doesn't say it got
+    // it (a window that can't reach the app), show the code to paste in GymBro instead.
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var res = { type: "gym-strava", code: q.get("code"), scope: q.get("scope"), state: q.get("state"), error: q.get("error"), at: Date.now() };
+      var $ = function (id) { return document.getElementById(id); };
+      var auth = null;
+      try { auth = JSON.parse(localStorage.getItem("gym.stravaAuth") || "null"); } catch (e) { auth = null; }
+      try { localStorage.setItem("gym.stravaResult", JSON.stringify(res)); } catch (e) { /* the app also gets a message */ }
+      var bc = null;
+      try { bc = new BroadcastChannel("gym-strava"); bc.postMessage(res); } catch (e) { bc = null; }
+      var opener = null;
+      try { opener = window.opener && window.opener !== window ? window.opener : null; } catch (e) { opener = null; }
+      if (opener) { try { opener.postMessage(res, location.origin); } catch (e) { /* the app reads it from storage */ } }
+      if (auth && auth.mode === "redirect") { location.replace("./"); return; }      // the whole app went to Strava
+      if (res.error || !res.code) {
+        $("msg").textContent = "Strava wasn't connected.";
+        $("sub").textContent = "You can close this window and go back to GymBro.";
+        return;
+      }
+      var acked = false;
+      var ack = function () {
+        if (acked) return;
+        acked = true;
+        $("msg").textContent = "Strava connected ✓";
+        $("sub").textContent = "You can close this window and go back to GymBro.";
+        $("paste").style.display = "none";
+        setTimeout(function () { try { window.close(); } catch (e) { /* not allowed */ } }, 300);
+      };
+      if (bc) bc.onmessage = function (ev) { if (ev.data && ev.data.type === "gym-strava-ack" && ev.data.state === res.state) ack(); };
+      var tries = 0;
+      var poll = setInterval(function () {
+        var got = null;
+        try { got = localStorage.getItem("gym.stravaAck"); } catch (e) { got = null; }
+        if (got === JSON.stringify(res.state)) { clearInterval(poll); ack(); return; }
+        if (++tries === 12 && !acked) {            // 2.4 seconds and no word from GymBro
+          $("msg").textContent = "Almost there";
+          $("code").textContent = res.code;
+          $("paste").style.display = "block";
+        }
+      }, 200);
+      $("copy").addEventListener("click", function () {
+        var done = function () { $("copy").textContent = "Copied ✓"; };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(res.code).then(done, function () { window.getSelection().selectAllChildren($("code")); });
+        else window.getSelection().selectAllChildren($("code"));
+      });
+    })();
+  </script>
+</body>
+</html>

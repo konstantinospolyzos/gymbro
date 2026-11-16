@@ -214,6 +214,8 @@ function normSession(s) {
     ...(str(s.notes, 2000) ? { notes: str(s.notes, 2000) } : {}),
     ...(int(s.feel, 1, 3) ? { feel: int(s.feel, 1, 3) } : {}),
     ...(s.manual ? { manual: true } : {}),
+    // on Strava since then (js/strava-api.js), so no phone uploads it twice
+    ...(num(s.strava?.at) ? { strava: { at: num(s.strava.at) } } : {}),
   };
 }
 
@@ -321,6 +323,12 @@ export function applyOp(data, op) {
     case "deleteSession":
       d.sessions = d.sessions.filter((s) => s.id !== op.id);
       break;
+    case "markStrava": {         // a workout went up to Strava (at: when), or at null: it's not there
+      const s = d.sessions.find((x) => x.id === op.id);
+      if (s && num(op.at)) s.strava = { at: num(op.at) };
+      else if (s) delete s.strava;
+      break;
+    }
     case "setSetting":
       if (op.key in DEFAULT_SETTINGS) d.settings[op.key] = op.value;
       return normalize(d);
