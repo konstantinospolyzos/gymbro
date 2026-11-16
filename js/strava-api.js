@@ -296,6 +296,14 @@ export function queueUploads(ids) {
   return flushStrava();
 }
 
+/** Upload a workout again (you deleted it on Strava): it loses its mark and goes up as a new activity */
+export function uploadAgain(sessionId) {
+  const l = links();
+  if (l[sessionId]) { delete l[sessionId]; lsSet(kLinks(), l); }
+  store.commit({ type: "markStrava", id: sessionId, at: null });
+  return queueUploads([sessionId]);
+}
+
 /** Upload what's waiting, one at a time. Safe to call any time: it does nothing when there's nothing to do. */
 export function flushStrava() {
   if (running) return running;

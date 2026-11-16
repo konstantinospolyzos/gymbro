@@ -1,12 +1,12 @@
 // Strava in the app: the one-time setup, the Settings section, a workout's Strava row (in its summary and
 // in History), and uploading workouts you did before connecting.
 
-import { h, icon, sheet, group, caption, footer, actionRow, infoRow, switchRow, toast, alertBox, copyText, openExternal } from "../ui.js";
+import { h, icon, sheet, group, caption, footer, actionRow, infoRow, switchRow, toast, alertBox, actionSheet, copyText, openExternal } from "../ui.js";
 import { NetworkError } from "../cloud/common.js";
 import { store } from "../store.js";
 import { shortDate, parseDay, plural } from "../core.js";
 import { stravaApp, setStravaApp, connected, athleteName, autoUpload, setAutoUpload, connectStrava, connectWithCode, finishPendingStrava,
-  disconnectStrava, queueUploads, flushStrava, stravaStatus, stravaProgress, stravaProblem, onStrava, stravaRedirect } from "../strava-api.js";
+  disconnectStrava, queueUploads, uploadAgain, flushStrava, stravaStatus, stravaProgress, stravaProblem, onStrava, stravaRedirect } from "../strava-api.js";
 import { NO } from "./common.js";
 
 const notOnStrava = () => (store.data?.sessions || []).filter((s) => !s.strava);
@@ -148,10 +148,18 @@ export function stravaRow(sessionId) {
     const st = stravaStatus(sessionId);
     let row;
     if (st.state === "done") {
-      row = actionRow("checkBold", "On Strava", st.link ? () => openExternal(st.link) : () => toast("It's on Strava"),
-        { detail: `Uploaded ${shortDate(new Date(st.at))}${st.link ? " · tap to open it" : ""}` });
+      const uploaded = `Uploaded ${shortDate(new Date(st.at))}`;
+      row = actionRow("checkBold", "On Strava", async () => {
+        const actions = [
+          st.link ? { text: "Open it in Strava", value: "open" } : null,
+          connected() ? { text: "Upload it again", value: "again", detail: "If you deleted it on Strava. If it's still there, you'll have it twice." } : null,
+        ].filter(Boolean);
+        if (!actions.length) { toast("It's on Strava"); return; }
+        const v = await actionSheet({ title: "On Strava", message: `${uploaded}.`, actions });
+        if (v === "open") openExternal(st.link);
+        if (v === "again") uploadAgain(sessionId);
+      }, { detail: `${uploaded} · ${st.link ? "open it, or " : ""}upload it again` });
       row.classList.add("strava-done");
-      if (!st.link) row.querySelector(".chev")?.remove();
     } else if (st.state === "uploading" || st.state === "queued") {
       row = h("div", { class: "action-row strava-busy", role: "status" }, icon("upload", 20, "row-icon"),
         h("span", { class: "action-text" }, h("span", null, st.state === "uploading" ? "Uploading to Strava…" : "Waiting to upload to Strava"),
