@@ -1,7 +1,7 @@
 // Strava in the app: the one-time setup, the Settings section, a workout's Strava row (in its summary and
 // in History), and uploading workouts you did before connecting.
 
-import { h, icon, sheet, group, caption, footer, actionRow, infoRow, switchRow, toast, alertBox, copyText } from "../ui.js";
+import { h, icon, sheet, group, caption, footer, actionRow, infoRow, switchRow, toast, alertBox, copyText, openExternal } from "../ui.js";
 import { NetworkError } from "../cloud/common.js";
 import { store } from "../store.js";
 import { shortDate, parseDay, plural } from "../core.js";
@@ -81,7 +81,7 @@ export function openStravaSetup({ onDone = null } = {}) {
   const body = h("div", { class: "form" },
     h("div", { class: "rec-intro" }, "GymBro adds each workout to Strava as a Weight Training activity with every set, so Strava shows the exercises, the volume and the muscles you trained. For that you make your own Strava API app once, in about two minutes. Strava asks for a subscription to make one."),
     caption("1 · Make the app on Strava"),
-    group(actionRow("link", "Open Strava's API page", () => window.open("https://www.strava.com/settings/api", "_blank", "noopener"),
+    group(actionRow("link", "Open Strava's API page", () => openExternal("https://www.strava.com/settings/api"),
       { detail: "strava.com/settings/api: sign in, then Create an app" })),
     footer("Fill it in with these (tap one to copy it). Pick any category. Strava then asks for an icon: any picture works."),
     h("div", { class: "group" }, copyRow("Application Name", "GymBro"), copyRow("Website", site), copyRow("Authorization Callback Domain", location.hostname)),
@@ -148,7 +148,7 @@ export function stravaRow(sessionId) {
     const st = stravaStatus(sessionId);
     let row;
     if (st.state === "done") {
-      row = actionRow("checkBold", "On Strava", st.link ? () => window.open(st.link, "_blank", "noopener") : () => toast("It's on Strava"),
+      row = actionRow("checkBold", "On Strava", st.link ? () => openExternal(st.link) : () => toast("It's on Strava"),
         { detail: `Uploaded ${shortDate(new Date(st.at))}${st.link ? " · tap to open it" : ""}` });
       row.classList.add("strava-done");
       if (!st.link) row.querySelector(".chev")?.remove();

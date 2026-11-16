@@ -342,6 +342,33 @@ export function pickFile(accept = "") {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Pages outside GymBro
+// ---------------------------------------------------------------------------
+/** GymBro running from its Home Screen icon on an iPhone */
+export const homeScreenApp = () => navigator.standalone === true;
+
+/**
+ * A web page outside GymBro (Strava, YouTube, claude.ai, a research paper). From the iPhone's Home Screen a
+ * page opened by the app comes up in a window over it, and coming back from that window leaves GymBro white
+ * until it's restarted. So there it opens in Safari itself (its x-safari-https: address): GymBro stays as it
+ * was, and you come back to it like from any app. Elsewhere it's a new tab. Call it from a tap.
+ */
+export const leave = { to: (href) => { location.href = href; } };    // (a test can watch where it goes)
+export function openExternal(url) {
+  if (!homeScreenApp() || !/^https:\/\//.test(url)) { window.open(url, "_blank", "noopener"); return; }
+  let away = false;
+  const left = () => { away = true; };
+  const events = [[document, "visibilitychange"], [window, "blur"], [window, "pagehide"]];
+  for (const [t, e] of events) t.addEventListener(e, left);
+  leave.to(`x-safari-${url}`);
+  // an iPhone that doesn't know Safari's address (before iOS 17): the window over the app after all
+  setTimeout(() => {
+    for (const [t, e] of events) t.removeEventListener(e, left);
+    if (!away) window.open(url, "_blank", "noopener");
+  }, 2000);
+}
+
 export async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch { /* below */ }
   try {

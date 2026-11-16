@@ -1,7 +1,7 @@
 // Settings: where your workouts are saved (OneDrive, Google Drive or the phone), the rest timer and its
 // beeps, the screen, your weekly goal, the look, the exercise list and backups.
 
-import { h, sheet, group, caption, footer, icon, alertBox, actionSheet, toast, saveFile, pickFile, actionRow, infoRow, switchRow, segmented, stepper, copyText, selectOnFocus } from "../ui.js";
+import { h, sheet, group, caption, footer, icon, alertBox, actionSheet, toast, saveFile, pickFile, actionRow, infoRow, switchRow, segmented, stepper, copyText, selectOnFocus, openExternal } from "../ui.js";
 import { store, describeData, readBackupFile } from "../store.js";
 import { APP_NAME, ALL_PLATES } from "../data.js";
 import { APP_VERSION, fmtRest, fmtKg, plannedDays, plural } from "../core.js";
@@ -86,7 +86,7 @@ export function openSettings() {
         m.problem && ["error", "retry"].includes(store.status.state)
           ? infoRow("What went wrong", `${new Date(m.problem.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${m.problem.step}: ${m.problem.text}`) : null,
         actionRow("sync", "Sync now", () => store.syncFromTap().then(() => toast(store.status.text))),
-        m.link ? actionRow("link", `Open the file in ${cloud.label}`, () => window.open(m.link, "_blank", "noopener")) : null));
+        m.link ? actionRow("link", `Open the file in ${cloud.label}`, () => openExternal(m.link)) : null));
       parts.push(footer(`Your workouts and plan are one file in your own ${cloud.label}, the same on every phone or computer signed in with your account. The app can only see its own files.`));
       parts.push(group(actionRow("cloudOff", `Stop using ${cloud.label}`, async () => {
         const ok = await alertBox({ title: `Stop using ${cloud.label}?`, message: `Your workouts stay on this phone, and the file in ${cloud.label} isn't deleted. You can connect again later.`,

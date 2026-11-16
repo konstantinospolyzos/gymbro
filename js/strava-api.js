@@ -57,6 +57,7 @@ export function authorizeUrl(state, app = stravaApp()) {
 }
 
 let waiting = false;     // a Strava window is open and the app is waiting for its answer
+let restarting = false;  // the app is about to start afresh to finish connecting
 
 /**
  * Must be called straight from a tap: opens Strava's window (the way the Google sign-in works), waits for its
@@ -76,14 +77,25 @@ export function connectStrava({ redirect = false } = {}) {
     return new Promise(() => {});              // the page is leaving
   }
   lsSet(KEY_AUTH, { state, mode: "popup", at: Date.now() });
-  return waitForAnswer(state, popup).then((res) => { lsDel(KEY_AUTH); return redeem(res); });
+  return waitForAnswer(state, popup).then((res) => {
+    if (navigator.standalone === true) {
+      // the iPhone's Home Screen: coming back from Strava's window can leave the app white, so it starts
+      // afresh, and finishPendingStrava completes the connection with the answer kept here
+      lsSet(KEY_RESULT, res);
+      restarting = true;
+      setTimeout(() => location.reload(), 400);
+      return new Promise(() => {});
+    }
+    lsDel(KEY_AUTH); lsDel(KEY_RESULT);
+    return redeem(res);
+  });
 }
 
 /** A connection that came back while nobody was waiting for it (the whole app went to Strava, or the window
  *  finished after the app stopped waiting). Resolves with the name, or null when there's nothing to finish. */
 export async function finishPendingStrava() {
   const auth = lsGet(KEY_AUTH), res = lsGet(KEY_RESULT);
-  if (waiting || !auth || !res || res.state !== auth.state) return null;
+  if (waiting || restarting || !auth || !res || res.state !== auth.state) return null;
   lsDel(KEY_AUTH); lsDel(KEY_RESULT);
   if (Date.now() - auth.at > 15 * 60000) return null;
   return redeem(res);
@@ -96,7 +108,6 @@ function waitForAnswer(state, popup) {
     const finish = (fn, v) => { if (done) return; done = true; cleanup(); fn(v); };
     const check = (res) => {
       if (done || !res || res.state !== state) return;
-      lsDel(KEY_RESULT);
       // tell the window its answer arrived (else it shows the code to paste here), then close it
       try { bc?.postMessage({ type: "gym-strava-ack", state }); } catch { /* closed */ }
       lsSet(KEY_ACK, state);

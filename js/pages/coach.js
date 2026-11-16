@@ -1,7 +1,7 @@
 // Ask Claude about a workout: in GymBro with your own Anthropic API key (the answer and follow-ups right
 // here, kept for next time), or without one, handed to the Claude app (which a Claude plan covers).
 
-import { h, icon, sheet, group, caption, footer, actionRow, toast, copyText, askText, alertBox, switchRow, chip } from "../ui.js";
+import { h, icon, sheet, group, caption, footer, actionRow, toast, copyText, askText, alertBox, switchRow, chip, openExternal } from "../ui.js";
 import { store } from "../store.js";
 import { exerciseMap } from "../data.js";
 import { lsGet, lsSet, lsDel } from "../cloud/common.js";
@@ -72,7 +72,7 @@ async function toClaudeApp(text) {
   }
   const ok = await copyText(text);
   await alertBox({ title: ok ? "Copied for Claude" : "Couldn't copy", message: ok ? "Paste it into a new chat in the Claude app or at claude.ai." : "Use “What Claude sees” to copy it." });
-  if (ok) window.open("https://claude.ai/new", "_blank", "noopener");
+  if (ok) openExternal("https://claude.ai/new");
 }
 
 /** Claude at work: what it's doing, then its answer as it's written (redrawn at most once a frame) */

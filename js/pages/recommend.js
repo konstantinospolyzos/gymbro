@@ -2,7 +2,7 @@
 // one to your plan on the days you pick (or start it now), or let the app pick a whole week for the number of
 // days you can train. Everything can be changed afterwards like your own workouts.
 
-import { h, icon, sheet, caption, footer, toast, alertBox, tile, initials, chip, segmented } from "../ui.js";
+import { h, icon, sheet, caption, footer, toast, alertBox, tile, initials, chip, segmented, openExternal } from "../ui.js";
 import { store } from "../store.js";
 import { exerciseMap, applyOp } from "../data.js";
 import { RECOMMENDED, GROUPS, GROUP_LABELS, TIPS, RESEARCH, VOLUME_MUSCLES, recommendedById, asWorkout, weeksFor, weekOp } from "../library.js";
@@ -123,7 +123,8 @@ export function openResearch() {
   const body = h("div", { class: "form" },
     h("div", { class: "rec-intro" }, "How the recommended workouts were put together, from studies and evidence-based coaches. Good to know for your own workouts too."),
     ...RESEARCH.map((r) => h("div", { class: "card research-card" }, h("div", { class: "research-text" }, r.text),
-      r.links.length ? h("div", { class: "research-links" }, r.links.map(([t, url]) => h("a", { href: url, target: "_blank", rel: "noopener", class: "research-link" }, icon("link", 14), t))) : null)));
+      r.links.length ? h("div", { class: "research-links" }, r.links.map(([t, url]) => h("a", { href: url, target: "_blank", rel: "noopener", class: "research-link",
+        onclick: (ev) => { ev.preventDefault(); openExternal(url); } }, icon("link", 14), t))) : null)));
   sheet({ title: "Why these exercises", right: { text: "Done", bold: true, onClick: (a) => a.close() }, body });
 }
 

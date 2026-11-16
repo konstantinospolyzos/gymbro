@@ -165,11 +165,14 @@ if (store.cloud) store.sync();
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && store.ready) store.syncIfStale(); });
 // back from another app (YouTube, the share sheet): draw the page again, so it can't come back blank; and a
 // copy of the page Safari kept frozen starts fresh (everything is saved, a workout in progress too)
-document.addEventListener("visibilitychange", () => {
+// (only a nudge: laying the page out from scratch would scroll the workout list back to the top)
+const repaint = () => {
   if (document.visibilityState !== "visible") return;
   document.body.style.opacity = "0.999";
   requestAnimationFrame(() => requestAnimationFrame(() => { document.body.style.opacity = ""; }));
-});
+};
+document.addEventListener("visibilitychange", repaint);
+window.addEventListener("focus", repaint);
 window.addEventListener("pageshow", (ev) => { if (ev.persisted) location.reload(); });
 window.addEventListener("online", () => { if (store.ready) store.syncIfStale(); });
 

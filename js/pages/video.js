@@ -2,7 +2,7 @@
 // leaves the app, and an iPhone can bring you back to a blank GymBro. With it: how to do it, and your own
 // video for the exercise (a YouTube link) if you like another one better.
 
-import { h, icon, sheet, group, caption, footer, actionRow, askText, alertBox, toast } from "../ui.js";
+import { h, icon, sheet, group, caption, footer, actionRow, askText, alertBox, toast, openExternal } from "../ui.js";
 import { store } from "../store.js";
 import { exerciseMap } from "../data.js";
 import { TIPS, VIDEOS, videoIdOf, youTubeId, videoUrl } from "../library.js";
@@ -11,12 +11,7 @@ import { TIPS, VIDEOS, videoIdOf, youTubeId, videoUrl } from "../library.js";
 export const embedUrl = (id) => `https://www.youtube-nocookie.com/embed/${id}?playsinline=1&rel=0&modestbranding=1`;
 
 /** YouTube's search, outside GymBro (the last resort, when no video is saved for an exercise) */
-function searchYouTube(name) {
-  const a = h("a", { href: videoUrl(name), target: "_blank", rel: "noopener" });
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
+const searchYouTube = (name) => openExternal(videoUrl(name));
 
 /** The video sheet of an exercise (exId), over the workout screen too */
 export function openVideo(exId, { name = "" } = {}) {
