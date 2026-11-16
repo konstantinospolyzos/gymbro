@@ -3,7 +3,7 @@
 // seconds so you're ready for the next set. Pull it down to look at the rest of the app; the workout
 // keeps running in the bar above the tabs.
 
-import { h, s, icon, alertBox, actionSheet, toast, askText, selectOnFocus, darkStatusBar } from "../ui.js";
+import { h, s, icon, alertBox, actionSheet, faceSheet, toast, askText, selectOnFocus, darkStatusBar } from "../ui.js";
 import { store } from "../store.js";
 import { exerciseMap, EFFORTS } from "../data.js";
 import { clock, fmtKg, kg, fmtRest, parseNum, parseSecs, setShort, setText, timeUnit, fmtSecs, relDay, timeOfDay, plural,
@@ -523,6 +523,9 @@ function commitSet(e, i) {
   if (!x.effort && (exerciseMap(store.data).get(x.ex)?.kind || x.kind) !== "time" && x.sets.every((st) => st.done || st.warm)) askEffort(e);
 }
 
+/** The faces for how an exercise felt, happy to wiped out */
+const FACES = { easy: "😄", moderate: "🙂", hard: "😣", failed: "😵" };
+
 /** Why today's weight changed: how the exercise felt last time */
 function feltLine(f) {
   const why = f.effort === "failed" ? "it failed last time" : `it felt ${f.effort} last time`;
@@ -541,14 +544,15 @@ async function askEffort(e) {
   if (!done.length) return;
   const top = Math.max(0, ...done.map((st) => st.w || 0));
   const added = kind === "reps" ? "+" : "";
+  // under each face: next time's weight, and the change
   const next = (id) => {
     const c = effortChange(id, done, kind, step);
-    if (c.kg) return `Next time ${added}${kg(top + c.kg)} (${c.kg > 0 ? "+" : "−"}${kg(Math.abs(c.kg))})`;
-    if (c.reps) return `Next time ${c.reps > 0 ? "+" : "−"}${plural(Math.abs(c.reps), "rep")} a set`;
-    return top ? `Next time ${added}${kg(top)} again` : "Next time the same";
+    if (c.kg) return { detail: `${added}${kg(top + c.kg)}`, sub: `${c.kg > 0 ? "+" : "−"}${kg(Math.abs(c.kg))}` };
+    if (c.reps) return { detail: `${c.reps > 0 ? "+" : "−"}${plural(Math.abs(c.reps), "rep")}`, sub: "a set" };
+    return { detail: top ? `${added}${kg(top)}` : "the same", sub: "same" };
   };
-  const v = await actionSheet({ title: `How did ${ex?.name || x.name} feel?`, message: "Your answer sets next time's weight.", cancel: "Skip",
-    actions: EFFORTS.map((f) => ({ text: f.label, value: f.id, detail: next(f.id), checked: x.effort === f.id })) });
+  const v = await faceSheet({ title: `How did ${ex?.name || x.name} feel?`, message: "It sets next time's weight", cancel: "Skip",
+    choices: EFFORTS.map((f) => ({ value: f.id, emoji: FACES[f.id], text: f.label, tone: f.id, checked: x.effort === f.id, ...next(f.id) })) });
   if (!v || A() !== a || !a.exercises.includes(x)) return;
   x.effort = v;
   save();
@@ -626,7 +630,7 @@ async function exerciseMenu(e) {
       nextX && !linkedNext ? { text: `Superset with ${exerciseMap(store.data).get(nextX.ex)?.name || nextX.name}`, value: "link" } : null,
       g ? { text: `Take out of superset ${g.label}`, value: "unlink" } : null,
       kind !== "time" && (x.effort || x.sets.some((st) => st.done && !st.warm))
-        ? { text: x.effort ? `How it felt: ${EFFORTS.find((f) => f.id === x.effort).label}` : "How did it feel?", value: "effort" } : null,
+        ? { text: x.effort ? `How it felt: ${FACES[x.effort]} ${EFFORTS.find((f) => f.id === x.effort).label}` : "How did it feel?", value: "effort" } : null,
       { text: `Rest for this exercise${x.rest !== null && x.rest !== undefined ? `: ${fmtRest(x.rest)}` : ""}`, value: "rest" },
       e > 0 ? { text: "Move up", value: "up" } : null,
       e < a.exercises.length - 1 ? { text: "Move down", value: "down" } : null,

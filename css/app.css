@@ -888,3 +888,20 @@ button.meta-chip:active { opacity: 0.6; }
 
 /* the version at the bottom of each tab */
 .app-version { text-align: center; font-size: 12px; color: var(--blue); padding: 26px 0 6px; letter-spacing: 0.02em; }
+
+/* "How did it feel?": four faces, green to red */
+.face-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 4px 12px 14px; }
+.face { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; padding: 12px 2px 10px; border-radius: 16px;
+  border: 2px solid transparent; color: var(--label); transition: transform 0.12s; }
+.face:active { transform: scale(0.95); }
+.face-emoji { font-size: 36px; line-height: 1.15; margin-bottom: 5px; }
+.face-text { font-size: 14px; font-weight: 700; }
+.face-detail { font-size: 12.5px; color: var(--label2); font-variant-numeric: tabular-nums; white-space: nowrap; margin-top: 3px; }
+.face-sub { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--gray); }
+.face.easy { background: rgba(52, 199, 89, 0.2); }
+.face.moderate { background: rgba(255, 204, 0, 0.18); }
+.face.hard { background: rgba(255, 149, 0, 0.18); }
+.face.failed { background: rgba(255, 59, 48, 0.18); }
+.face.easy .face-sub, .face.moderate .face-sub { color: var(--up-fg); }
+.face.failed .face-sub { color: var(--down-fg); }
+.face.on { border-color: var(--blue); }

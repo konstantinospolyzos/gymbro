@@ -257,6 +257,35 @@ export function actionSheet({ title = "", message = "", actions = [], cancel = "
   });
 }
 
+/** A row of big choices with a face each, where an action sheet comes up ("How did it feel?", like a sports
+ *  watch asks). choices: [{value, emoji, text, detail, sub, tone, checked}] -> Promise(value, or null: skipped) */
+export function faceSheet({ title = "", message = "", choices = [], cancel = "Skip" }) {
+  return new Promise((resolve) => {
+    const wrap = h("div", { class: `as-wrap ${overDark()}` });
+    const keys = new AbortController();
+    let done = false;
+    const finish = (v) => {
+      if (done) return;
+      done = true;
+      keys.abort();
+      wrap.classList.remove("open");
+      setTimeout(() => wrap.remove(), 260);
+      resolve(v);
+    };
+    document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") finish(null); }, { signal: keys.signal });
+    const row = h("div", { class: "face-row" }, choices.map((c) => h("button", { type: "button", class: `face ${c.tone || ""} ${c.checked ? "on" : ""}`,
+      "aria-label": [c.text, c.detail, c.sub].filter(Boolean).join(", "), onclick: () => finish(c.value) },
+      h("span", { class: "face-emoji", "aria-hidden": "true" }, c.emoji), h("span", { class: "face-text" }, c.text),
+      c.detail ? h("span", { class: "face-detail" }, c.detail) : null, c.sub ? h("span", { class: "face-sub" }, c.sub) : null)));
+    const head = title || message ? h("div", { class: "as-head" }, title ? h("div", { class: "as-title" }, title) : null, message ? h("div", { class: "as-message" }, message) : null) : null;
+    wrap.append(h("div", { class: "as-backdrop", onclick: () => finish(null) }),
+      h("div", { class: "as-panel", role: "dialog", "aria-label": title || "Choose" }, h("div", { class: "as-group" }, head, row),
+        h("button", { type: "button", class: "as-btn as-cancel", onclick: () => finish(null) }, cancel)));
+    host().appendChild(wrap);
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add("open")));
+  });
+}
+
 /** iOS alert. buttons: [{text, value, style: "cancel" | "destructive" | "bold"}] -> Promise(value).
  *  input: {value, placeholder, mode} adds a text field; the promise then gives [value, text].
  *  A tap next to the alert (or Escape) is its Cancel button, so an alert can never trap you. */
