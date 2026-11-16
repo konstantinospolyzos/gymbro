@@ -186,7 +186,7 @@ export function openSettings() {
       h("p", null, h("b", null, "Android: "), "open it in Chrome, tap ⋮, then “Add to Home screen” or “Install app”."))));
     parts.push(group(actionRow("sync", "Check for updates", async () => {
       toast("Checking…");
-      toast((await checkForUpdate()) ? "A new version is ready: tap Update" : `You have the newest version (${APP_VERSION})`);
+      toast((await checkForUpdate()) ? "Updating…" : `You have the newest version (${APP_VERSION})`);
     })));
     parts.push(h("div", { class: "about" }, `${APP_NAME} ${APP_VERSION} · ${describeData(data)}`));
     body.replaceChildren(...parts.filter(Boolean));

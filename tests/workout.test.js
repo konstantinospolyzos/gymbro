@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emptyData, applyOp, sampleOp, exerciseMap } from "../js/data.js";
 import { startActive, completeSet, current, nextAfter, tick, addRest, restLeft, toSession, addSet, removeSet, counts,
-  addExercise, prefill, skipRest, uncompleteSet, noteFor, setNote, notesChanged, notesToSave } from "../js/workout.js";
+  addExercise, prefill, skipRest, uncompleteSet, noteFor, setNote, notesChanged, notesToSave, usualFor } from "../js/workout.js";
 
 const plan = () => applyOp(emptyData(), sampleOp(emptyData()));
 const NOW = new Date("2026-11-09T18:00:00").getTime();
@@ -168,4 +168,18 @@ test("notes: typed in a workout they go to the exercise, and the workout keeps w
   d = applyOp(d, { type: "setExerciseNotes", id, notes: "x".repeat(600) });
   assert.equal(exerciseMap(d).get(id).notes.length, 500);
   assert.doesNotThrow(() => applyOp(d, { type: "setExerciseNotes", id: "ex-nope", notes: "hi" }));
+});
+
+test("what a set usually is: today's sets first, else last time's and the plan's", () => {
+  const set = (w, r, more = {}) => ({ w, r, s: null, orig: { w, r, s: null }, done: false, at: null, ...more });
+  const x = { target: { sets: 3, reps: 8, hi: 12, w: 60 }, prev: [{ w: 80, r: 10 }, { w: 80, r: 9 }, { w: 77.5, r: 8 }],
+    sets: [set(20, 10, { warm: true, done: true }), { ...set(80, 10), w: 800 }, set(80, 10), set(80, 10)] };
+  // nothing done today (the warm-up doesn't count): last time's, the plan's and what the set started with
+  assert.deepEqual(usualFor(x, 1), { w: 80, r: 9.5 });
+  // today's sets once there are some, and never the set itself
+  x.sets[1] = set(85, 8, { done: true });
+  x.sets[2] = set(85, 6, { done: true });
+  assert.deepEqual(usualFor(x, 3), { w: 85, r: 7 });
+  // never done, no plan: nothing to compare with
+  assert.deepEqual(usualFor({ target: null, prev: [], sets: [set(null, null)] }, 0), { w: null, r: null });
 });

@@ -66,6 +66,19 @@ export const warmCount = (x) => x.sets.filter((st) => st.warm).length;
 /** A set's number among the working sets (0 for the first), or null for a warm-up */
 export const workIndex = (x, s) => (x.sets[s]?.warm ? null : s - x.sets.slice(0, s).filter((st) => st.warm).length);
 
+/** What a set's kilos and reps usually are, to catch a slip of the finger: the sets done today, else last
+ *  time's, the plan's and what the set started with. The middle value of those; null when there's none. */
+export function usualFor(x, i) {
+  const today = x.sets.filter((st, j) => j !== i && st.done && !st.warm);
+  const t = x.target || {};
+  const pool = today.length ? today : [...(x.prev || []), x.sets[i]?.orig, { w: t.w, r: t.reps }, { r: t.hi }].filter(Boolean);
+  const middle = (list) => {
+    const v = list.filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+    return v.length ? (v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2) : null;
+  };
+  return { w: middle(pool.map((st) => st.w)), r: middle(pool.map((st) => st.r)) };
+}
+
 /** Warm-up sets before an exercise's sets, from the weight of its first set. Returns how many. */
 export function addWarmups(active, data, e) {
   const x = active.exercises[e];

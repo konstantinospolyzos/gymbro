@@ -1,11 +1,11 @@
 // Offline first: GymBro's files come from the phone, so it opens at once at the gym, even without a signal.
 // Each version is saved whole when it installs (fresh from the website, never an older copy), so the files
-// always belong together. A new version installs in the background and waits; the app then shows
-// "New version ready", and a tap switches to it (or it's used the next time the app starts).
+// always belong together. A new version installs in the background and waits; the app switches to it by
+// itself at a quiet moment (opening, coming back to the front, the end of a workout).
 // js/config.js is the exception: it's yours to edit, so a change there is picked up on the next start.
 // OneDrive, Google Drive, the sign-ins and Claude always go to the network.
 // The Savings Tracker and Glosor live on the same website, so only this app's own caches are touched here.
-const VERSION = "1.12";            // the same as APP_VERSION in js/core.js (a test checks): new version, new files
+const VERSION = "1.13";            // the same as APP_VERSION in js/core.js (a test checks): new version, new files
 const PREFIX = "gymbro-";
 const CACHE = `${PREFIX}${VERSION}`;
 const CONFIG = "js/config.js";

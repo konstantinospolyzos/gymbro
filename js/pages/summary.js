@@ -8,6 +8,7 @@ import { compareSession, clock, fmtDuration, fmtVolume, fmtNum, longDate, parseD
 import { barChart } from "../charts.js";
 import { setsLine, noteText } from "./common.js";
 import { openCoach } from "./coach.js";
+import { settle } from "../update.js";
 import { sessionReport } from "../coach.js";
 
 const FEELS = [[1, "😮‍💨", "Hard"], [2, "🙂", "Good"], [3, "💪", "Great"]];
@@ -130,6 +131,8 @@ export function showSummary(session, { fresh = false } = {}) {
     setTimeout(() => wrap.remove(), 320);
     if (store.needsTap) store.syncFromTap();      // this tap can sign in again, so the workout reaches the cloud
     store.emit();
+    // a new version that waited for the workout to end switches now
+    setTimeout(() => settle("idle"), 1500);
   };
   body.append(...summaryContent(store.data, session, { fresh, onFeel: (f) => { feel = f; }, onNotes: (t) => { notes = t; } }),
     h("button", { type: "button", class: "btn gray wide sum-claude", onclick: () => openCoach({ id: `s:${session.id}`, title: session.name,

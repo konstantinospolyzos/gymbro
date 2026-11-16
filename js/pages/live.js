@@ -7,11 +7,11 @@ import { h, s, icon, alertBox, actionSheet, toast, askText, selectOnFocus, darkS
 import { store } from "../store.js";
 import { exerciseMap } from "../data.js";
 import { clock, fmtKg, kg, fmtRest, parseNum, parseSecs, setShort, setText, timeUnit, fmtSecs, relDay, timeOfDay, plural,
-  supersets, linkNext, unlink, barOf, platesText } from "../core.js";
+  supersets, linkNext, unlink, barOf, platesText, slip } from "../core.js";
 import { TIPS } from "../library.js";
 import { startActive, completeSet, uncompleteSet, current, addRest, skipRest, restLeft, tick, counts, toSession, addSet, removeSet,
   addExercise, removeExercise, moveExercise, lastDoneAt, noteFor, setNote, notesChanged, notesToSave,
-  addWarmups, removeWarmups, warmCount, workIndex, swapExercise, retargetRest } from "../workout.js";
+  addWarmups, removeWarmups, warmCount, workIndex, swapExercise, retargetRest, usualFor } from "../workout.js";
 import { unlock, scheduleCountdown, cancelCountdown, keepAwake, haptic, playFinish } from "../sound.js";
 import { NO, chooseRest } from "./common.js";
 import { openExercisePicker, openSwapPicker } from "./editors.js";
@@ -200,7 +200,7 @@ function render() {
   saveNotes();              // a note typed just before a tap: its box is about to be rebuilt
   const a = A();
   root.style.setProperty("--wc", `var(--w-${a.color})`);
-  els.name.replaceChildren(h("span", { class: `dot c-${a.color}` }), a.name);
+  els.name.replaceChildren(h("span", { class: `dot c-${a.color}` }), h("span", { class: "live-name-text" }, a.name));
   els.clock.textContent = clock(Date.now() - a.start);
   renderList();
   renderDock();
@@ -443,6 +443,7 @@ function doneCurrent() {
 }
 
 function logSet(e, i) {
+  if (asking) return;
   const a = A();
   const x = a.exercises[e], st = x.sets[i];
   const kind = exerciseMap(store.data).get(x.ex)?.kind || x.kind;
@@ -451,6 +452,61 @@ function logSet(e, i) {
     return;
   }
   unlock();
+  const odd = kind === "time" ? [] : slipsIn(x, i);
+  if (odd.length) {
+    // ask first; the set is logged after (or left as it is, to fix by hand)
+    askSlips(e, i, odd).then((ok) => { if (ok && A() === a && a.exercises[e]?.sets[i] === st && !st.done) commitSet(e, i); });
+    return;
+  }
+  commitSet(e, i);
+}
+
+/** Kilos or reps far off from usual (800 kg for 80, 100 reps for 10), not already confirmed */
+function slipsIn(x, i) {
+  const st = x.sets[i];
+  if (!st || st.warm) return [];
+  const usual = usualFor(x, i);
+  return ["w", "r"].map((key) => {
+    if (st.sure?.[key] === st[key]) return null;
+    const hit = slip(st[key], usual[key], { reps: key === "r" });
+    return hit ? { key, value: st[key], usual: usual[key], fix: hit.fix } : null;
+  }).filter(Boolean);
+}
+
+let asking = false;
+/** "800 kg?" for each odd number, once. false: Cancel, the set stays as it is to fix by hand. */
+async function askSlips(e, i, odd) {
+  asking = true;
+  try {
+    for (const { key, value, usual, fix } of odd) {
+      const x = A()?.exercises[e], st = x?.sets[i];
+      if (!st) return false;
+      const show = key === "w" ? kg : (n) => plural(n, "rep");
+      const buttons = [
+        fix !== null ? { text: `Log ${show(fix)}`, value: "fix", style: "bold" } : null,
+        { text: `Log ${show(value)}`, value: "keep", style: fix === null ? "bold" : "" },
+        { text: "Cancel", value: false, style: "cancel" },
+      ].filter(Boolean);
+      if (buttons.length === 2) buttons.reverse();          // two side by side: Cancel on the left
+      const name = exerciseMap(store.data).get(x.ex)?.name || x.name;
+      const answer = await alertBox({ title: `${show(value)}?`, buttons,
+        message: usual ? `Usually about ${show(key === "w" ? Math.round(usual * 2) / 2 : Math.round(usual))} for ${name}.` : `That's a lot for ${name}.` });
+      if (!answer || A()?.exercises[e]?.sets[i] !== st) return false;
+      if (answer === "fix") {
+        st[key] = fix;
+        syncRowInput(e, i, key, key === "w" ? fmtKg(fix).replace(/\s/g, "") : String(fix));
+      }
+      st.sure = { ...st.sure, [key]: st[key] };
+      save();
+    }
+    return true;
+  } finally {
+    asking = false;
+  }
+}
+
+function commitSet(e, i) {
+  const a = A();
   haptic();
   const rest = completeSet(a, e, i, Date.now());
   save();

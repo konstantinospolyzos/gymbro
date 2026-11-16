@@ -10,12 +10,14 @@ Your gym week on your phone, in the same iOS look as the Savings Tracker and Glo
   16–19, never over 20); a test checks it
 - **Today:** today's workout, one tap to start
 - **The workout:** a clock for the whole workout, one big **Set done** button, then the rest counts down and beeps
-  (and flashes) in its last 5 seconds so you're ready for the next set; weights start from last time
+  (and flashes) in its last 5 seconds so you're ready for the next set; weights start from last time. A number far
+  off from usual (800 kg for 80, 100 reps for 10) is asked about once when you log the set: "800 kg?"
 - **In the gym:** warm-up sets for the first heavy lift, the plates for each side of the bar, supersets (one set of
   each in turn, then rest), swap an exercise for a similar one when the machine is taken (or ask Claude for one
   that suits a reason, like knee pain), a video of how to do it, played inside the app (your own YouTube link if you
   like another one)
-- **Plan:** drag an exercise by its handle to reorder a workout; each exercise's video is a tap away
+- **Plan:** drag an exercise by its handle to reorder a workout; each exercise's video is a tap away; under the
+  exercises, each muscle the workout works with its hard sets for the whole week as you edit (10–20 is the aim)
 - **Notes:** every exercise has its own notes (seat height, grip, what to try next), on its card in every workout;
   the summary and History keep what you wrote on the day
 - **Summary:** total time, volume, and every exercise against the last time, with new personal records
@@ -32,7 +34,8 @@ Your gym week on your phone, in the same iOS look as the Savings Tracker and Glo
 
 Data is a JSON file in your own OneDrive (or Google Drive, or on the phone only), synced change by change, the same
 way as the Savings Tracker. The app itself is saved on the phone, so it opens at once at the gym, with or without a
-signal; a new version downloads in the background and a bar offers to switch to it.
+signal; a new version downloads in the background and switches over by itself at a quiet moment (never during a
+workout).
 
 - `index.html`, `css/`, `js/`: the app (plain JavaScript modules, no build step)
 - `auth.html`: where Microsoft's sign-in comes back to (it hands the one-time code to the app)
@@ -44,7 +47,7 @@ signal; a new version downloads in the background and a bar offers to switch to 
   and what each exercise is (its movement, bar and the muscles a set counts for)
 - `js/profiles.js`: the profiles on the phone and what each keeps (its storage names and its cloud file)
 - `js/coach.js`: what Claude is told about a workout, its instructions, and asking it (`js/pages/coach.js`: the sheet)
-- `js/csv.js`: the CSV export; `js/update.js`: "New version ready"; `sw.js`: the offline copy of the app (its
+- `js/csv.js`: the CSV export; `js/update.js`: new versions, switched to at a quiet moment; `sw.js`: the offline copy of the app (its
   `VERSION` is the app's version: change both for a new version)
 - `js/store.js`: syncing, offline queue, weekly backup in the cloud; `js/cloud/onedrive.js` (Microsoft Graph, the
   app's own OneDrive folder) and `js/cloud/google.js` (Google Drive)

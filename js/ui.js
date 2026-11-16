@@ -102,7 +102,11 @@ export function tile(color, text, size = 44) {
   if (text) el.textContent = text; else el.appendChild(icon("dumbbell", Math.round(size * 0.55)));
   return el;
 }
-export const initials = (name) => (name || "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+/** "Back & biceps" -> "BB": the first letters of the first two words (not "&", "+" or "-") */
+export const initials = (name) => {
+  const words = (name || "").trim().split(/\s+/).filter((w) => /^[\p{L}\p{N}]/u.test(w));
+  return words.length ? words.slice(0, 2).map((w) => w[0]).join("").toUpperCase() : (name || "?").trim().slice(0, 1) || "?";
+};
 
 export function segmented(options, index, onChange, extra = "") {
   const el = h("div", { class: `segmented ${extra}`, role: "tablist" });

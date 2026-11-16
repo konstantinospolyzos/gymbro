@@ -172,4 +172,4 @@ window.addEventListener("online", () => { if (store.ready) store.syncIfStale(); 
 let day = isoDay(new Date());
 setInterval(() => { const d = isoDay(new Date()); if (d !== day) { day = d; if (store.ready && !document.querySelector(".sheet-wrap")) render(); } }, 60000);
 
-startUpdates();
+startUpdates({ isBusy: () => Boolean(store.active) });

@@ -4,7 +4,7 @@
 import { exerciseMap, bySessionStart, uid, DEFAULT_SETTINGS } from "./data.js";
 import { PATTERN, BARBELL, VOLUME, VOLUME_MUSCLES } from "./library.js";
 
-export const APP_VERSION = "1.12";
+export const APP_VERSION = "1.13";
 
 // ---------------------------------------------------------------------------
 // Dates (local time; a workout's "date" is the day it started)
@@ -75,6 +75,28 @@ export function parseSecs(text) {
   if (m) return Number(m[1]) * 60 + Number(m[2]);
   const v = parseNum(t);
   return v === null ? null : Math.round(v);
+}
+
+/** Kilos or reps that are probably a slip of the finger: 800 for 80, 8 for 80, 625 for 62.5, 100 reps for 10.
+ *  usual: what it normally is (null when unknown). null when the number looks fine, else {fix}: what it most
+ *  likely should be (null when there's no good guess). Fewer reps than usual is never a slip: sets fail. */
+export function slip(value, usual, { reps = false } = {}) {
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const tidy = (v) => Math.round(v * 100) / 100;
+  if (!(usual > 0)) return !reps && value >= 500 ? { fix: tidy(value / 10) } : null;
+  const ratio = value / usual;
+  const high = ratio >= 5, low = !reps && ratio <= 0.2;
+  if (!high && !low) return null;
+  const text = String(value);
+  const tries = high
+    ? [value / 10, value / 100, ...[...text].map((_, i) => Number(text.slice(0, i) + text.slice(i + 1)))]
+    : [value * 10, value * 100];
+  let fix = null;
+  for (const v of tries.map(tidy)) {
+    if (!(v > 0) || (reps && !Number.isInteger(v)) || v / usual < 0.5 || v / usual > 2) continue;
+    if (fix === null || Math.abs(Math.log(v / usual)) < Math.abs(Math.log(fix / usual))) fix = v;
+  }
+  return { fix };
 }
 
 export const plural = (n, one, many = `${one}s`) => `${fmtNum(n)} ${n === 1 ? one : many}`;
@@ -620,6 +642,21 @@ export function weekMuscles(data, now = today()) {
   const names = [...VOLUME_MUSCLES, ...[...done.keys(), ...planned.keys()].filter((k) => !VOLUME_MUSCLES.includes(k))];
   return [...new Set(names)].map((muscle) => ({ muscle, done: done.get(muscle) || 0, planned: planned.get(muscle) || 0 }))
     .filter((x) => VOLUME_MUSCLES.includes(x.muscle) || x.done || x.planned);
+}
+
+/** Hard sets a week per muscle with the workout w as it's being edited, on these days (a workout it takes a
+ *  day from drops out), and the rest of the week as it is. On no day: as if it were done once a week. */
+export function plannedWith(data, w, days) {
+  const exMap = exerciseMap(data), sets = new Map(), on = new Set(days.map(String));
+  const add = (workout, n) => {
+    for (const it of workout.items) for (const [m, f] of Object.entries(volumeOf(it.ex, exMap.get(it.ex)))) sets.set(m, (sets.get(m) || 0) + (it.sets || 0) * f * n);
+  };
+  for (const [day, id] of Object.entries(data.schedule)) {
+    const other = id === w.id || on.has(day) ? null : data.workouts.find((x) => x.id === id);
+    if (other) add(other, 1);
+  }
+  add(w, Math.max(on.size, 1));
+  return VOLUME_MUSCLES.map((muscle) => ({ muscle, planned: sets.get(muscle) || 0 }));
 }
 
 // ---------------------------------------------------------------------------

@@ -4,10 +4,11 @@
 import { h, icon, sheet, group, caption, footer, alertBox, toast, segmented, stepper, selectOnFocus, tile, initials, switchRow, actionRow, dragSort } from "../ui.js";
 import { store } from "../store.js";
 import { uid, MUSCLES, COLORS, KIND_LABELS, exerciseMap } from "../data.js";
-import { WEEKDAYS, WEEK_ORDER, fmtRest, fmtKg, kg, parseNum, timeUnit, fmtSecs, repRange, barOf, supersets, linkNext, alternatives, lastFor, relDay, moveItem } from "../core.js";
+import { WEEKDAYS, WEEK_ORDER, fmtRest, fmtKg, kg, parseNum, timeUnit, fmtSecs, repRange, barOf, supersets, linkNext, alternatives, lastFor, relDay, moveItem,
+  fmtNum, volumeOf, plannedWith } from "../core.js";
 import { TIPS } from "../library.js";
 import { openRecommended } from "./recommend.js";
-import { NO, chooseRest, setsLine } from "./common.js";
+import { NO, chooseRest, setsLine, volumeBars } from "./common.js";
 import { openCoach, openClaudeSwap } from "./coach.js";
 import { openVideo } from "./video.js";
 import { planReport } from "../coach.js";
@@ -296,6 +297,7 @@ export function openWorkoutEditor(workout = null) {
     const taken = [...days].map((d) => [d, data.schedule[String(d)]]).filter(([, id]) => id && id !== w.id)
       .map(([d, id]) => `${WEEKDAYS[d]} (now ${data.workouts.find((x) => x.id === id)?.name})`);
     dayFoot.textContent = taken.length ? `This workout takes over ${taken.join(", ")}.` : days.size ? "" : "Not on any day yet: you can still start it from Today.";
+    drawVolume();
   };
 
   const presets = h("div", { class: "rest-presets" });
@@ -332,6 +334,25 @@ export function openWorkoutEditor(workout = null) {
     w.items[i] = item;
     drawItems();
     toast(`${nx?.name || "Swapped"} instead of ${was?.name || "the old one"}`);
+  };
+  // each muscle this workout works (now, or when it was opened): its hard sets for the whole week, as edited
+  const worked = (list) => list.flatMap((it) => Object.keys(volumeOf(it.ex, exerciseMap(store.data).get(it.ex))));
+  const firstWorked = worked(w.items);
+  const volume = h("div");
+  const drawVolume = () => {
+    const shown = new Set([...firstWorked, ...worked(w.items)]);
+    const rows = plannedWith(store.data, w, [...days]).filter((r) => shown.has(r.muscle));
+    if (!rows.length) { volume.replaceChildren(); return; }
+    const n = (v) => fmtNum(v, v % 1 ? 1 : 0);
+    const list = (f) => rows.filter(f).map((r) => `${r.muscle} ${n(r.planned)}`).join(", ");
+    const low = list((r) => r.planned < 10), high = list((r) => r.planned > 20);
+    volume.replaceChildren(caption("Sets per muscle a week"),
+      h("div", { class: "card editor-volume" }, volumeBars(rows),
+        h("div", { class: `mv-note ${low || high ? "warn" : ""}` }, [
+          low ? `Under 10 a week: ${low}. Add a set, or another exercise for it.` : "",
+          high ? `Over 20 a week: ${high}. More than 20 rarely builds more, it mostly tires you.` : "",
+        ].filter(Boolean).join(" ") || "10–20 hard sets a week builds muscle.")),
+      footer(`${days.size ? "Your whole week with these changes." : "As if you did it once a week, with the rest of your week."} A press also counts half a set for the triceps and shoulders, a row half for the biceps.`));
   };
   const drawItems = () => {
     const exMap = exerciseMap(store.data);
@@ -375,6 +396,7 @@ export function openWorkoutEditor(workout = null) {
       for (const id of ids) { const ex = exMap2.get(id); if (ex) w.items.push(newItem(ex)); }
       drawItems();
     } }) }, icon("plus", 20, "row-icon"), h("span", { class: "action-text" }, "Add exercises"), icon("chevron", 15, "chev")));
+    drawVolume();
   };
 
   drawHead(); drawSwatches(); drawDays(); drawRest(); drawItems();
@@ -393,7 +415,7 @@ export function openWorkoutEditor(workout = null) {
     caption("Days"), h("div", { class: "group" }, dayChips), dayFoot,
     caption("Rest"), h("div", { class: "group" }, restRow),
     footer("The rest timer starts each time you tap Set done. You can give an exercise its own rest (tap it below)."),
-    caption("Exercises"), items,
+    caption("Exercises"), items, volume,
     h("div", { class: "group", style: { marginTop: "22px" } }, actionRow("sparkle", "Ask Claude about this workout",
       () => openCoach({ id: `w:${w.id}`, title: w.name.trim() || "this workout", report: () => planReport(store.data, { ...w, name: w.name.trim() }, [...days]) }),
       { detail: "Feedback on the exercises, sets and rest, with your whole week" })),

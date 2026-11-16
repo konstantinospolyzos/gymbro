@@ -72,11 +72,11 @@ export function emptyState(iconName, title, text, ...buttons) {
     h("div", { class: "empty-text" }, text), ...buttons);
 }
 
-/** Each muscle's sets a week against the 10–20 that builds muscle */
+/** Each muscle's sets a week against the 10–20 that builds muscle (under or over it in orange) */
 export function volumeBars(rows) {
   const max = 24, at = (v) => `${(Math.min(v, max) / max) * 100}%`;
   const n = (v) => fmtNum(v, v % 1 ? 1 : 0);
-  return h("div", { class: "mv-rows week-vol", role: "list" }, rows.map((r) => h("div", { class: `mv-row ${r.planned < 10 ? "low" : ""}`, role: "listitem",
+  return h("div", { class: "mv-rows week-vol", role: "list" }, rows.map((r) => h("div", { class: `mv-row ${r.planned < 10 ? "low" : r.planned > 20 ? "high" : ""}`, role: "listitem",
     "aria-label": `${r.muscle}: ${n(r.planned)} sets a week` },
     h("span", { class: "mv-label" }, r.muscle),
     h("span", { class: "mv-track" }, h("span", { class: "mv-band", style: { left: at(10), width: `calc(${at(20)} - ${at(10)})` } }),

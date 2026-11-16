@@ -3,7 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emptyData, applyOp, normalize, sampleOp, hasContent } from "../js/data.js";
 import { e1rm, parseNum, parseSecs, fmtKg, fmtNum, clock, fmtRest, fmtDuration, compareSession, streak, weekly, recordsIn,
-  previousSession, exStats, changeOf, muscleSplit, expectedMinutes, relDay, parseDay, recordCounts, exerciseSummaries, setText } from "../js/core.js";
+  previousSession, exStats, changeOf, muscleSplit, expectedMinutes, relDay, parseDay, recordCounts, exerciseSummaries, setText, slip,
+  plannedWith, weekMuscles, volumeOf } from "../js/core.js";
+import { VOLUME_MUSCLES } from "../js/library.js";
 
 const withPlan = () => applyOp(emptyData(), sampleOp(emptyData()));
 const T = (iso, hh = 18) => new Date(`${iso}T${String(hh).padStart(2, "0")}:00:00`).getTime();
@@ -156,4 +158,53 @@ test("the recommended workouts and weeks are complete", async () => {
 test("an older file gets the exercises added to the library since", () => {
   const old = { ...emptyData(), exercises: emptyData().exercises.filter((e) => e.id !== "ex-seated-leg-curl") };
   assert.ok(normalize(old).exercises.some((e) => e.id === "ex-seated-leg-curl"));
+});
+
+test("a slip of the finger: 800 kg for 80, 8 for 80, 625 for 62.5, 100 reps for 10", () => {
+  // an extra digit, a lost decimal point, a double tap, a lost digit
+  assert.deepEqual(slip(800, 80), { fix: 80 });
+  assert.deepEqual(slip(625, 62.5), { fix: 62.5 });
+  assert.deepEqual(slip(660, 60), { fix: 60 });
+  assert.deepEqual(slip(8, 80), { fix: 80 });
+  assert.deepEqual(slip(2.5, 25), { fix: 25 });
+  assert.deepEqual(slip(100, 10, { reps: true }), { fix: 10 });
+  assert.deepEqual(slip(88, 8, { reps: true }), { fix: 8 });
+  assert.deepEqual(slip(105, 10, { reps: true }), { fix: 10 });
+  // far off with no good guess: still asked, with nothing to offer
+  assert.deepEqual(slip(9000, 12), { fix: null });
+  // fine: normal jumps, drop sets, failed sets, nothing typed
+  for (const [v, u] of [[100, 80], [40, 100], [25, 20], [10, 2.5], [0, 80], [null, 80]]) assert.equal(slip(v, u), null, `${v} for ${u}`);
+  assert.equal(slip(3, 10, { reps: true }), null);
+  assert.equal(slip(30, 10, { reps: true }), null);
+  // nothing to compare with: only kilos nobody lifts
+  assert.equal(slip(140, null), null);
+  assert.deepEqual(slip(1000, null), { fix: 100 });
+  assert.equal(slip(500, null, { reps: true }), null);
+});
+
+test("sets a week per muscle with a workout as it's being edited", () => {
+  const d = applyOp(emptyData(), sampleOp(emptyData()));      // Mon back, Tue chest, Wed legs, Thu shoulders, Fri arms
+  const w = structuredClone(d.workouts.find((x) => x.id === "rec-back"));
+  const get = (rows, m) => rows.find((r) => r.muscle === m).planned;
+  const plan = (schedule) => weekMuscles({ ...d, schedule, sessions: [] });
+  const sum = (rows, m) => rows.find((r) => r.muscle === m)?.planned || 0;
+  const rest = plan({ 2: "rec-chest", 3: "rec-legs", 4: "rec-shoulders", 5: "rec-arms" });
+  // unchanged: the week's plan as it is; on no day it counts once, like now
+  for (const m of VOLUME_MUSCLES) {
+    assert.equal(get(plannedWith(d, w, [1]), m), sum(weekMuscles(d), m), m);
+    assert.equal(get(plannedWith(d, w, []), m), get(plannedWith(d, w, [1]), m), m);
+  }
+  // a set more of the first exercise: its muscles go up by their share of it
+  const before = plannedWith(d, w, [1]);
+  w.items[0].sets += 1;
+  const once = plannedWith(d, w, [1]);
+  for (const m of VOLUME_MUSCLES) assert.equal(get(once, m) - get(before, m), volumeOf(w.items[0].ex, null)[m] || 0, m);
+  // on Saturday too it counts twice; on Wednesday too it also takes the day from legs
+  const twice = plannedWith(d, w, [1, 6]), wed = plannedWith(d, w, [1, 3]);
+  const noLegs = plan({ 2: "rec-chest", 4: "rec-shoulders", 5: "rec-arms" });
+  for (const m of VOLUME_MUSCLES) {
+    const back = get(once, m) - sum(rest, m);
+    assert.equal(get(twice, m), sum(rest, m) + 2 * back, m);
+    assert.equal(get(wed, m), sum(noLegs, m) + 2 * back, m);
+  }
 });
