@@ -777,6 +777,8 @@ button.meta-chip:active { opacity: 0.6; }
 .note-text .icon { margin-top: 2px; color: var(--gold-fg); }
 .note-text span { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ex-up { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 3px 8px; border-radius: 8px; font-size: 12.5px; font-weight: 700; color: var(--up-fg); background: var(--up-bg); }
+.ex-up.down { color: var(--down-fg); background: var(--down-bg); }
+.ex-up.same { color: var(--gray); background: var(--fill); }
 
 @media (min-width: 700px) {
   .stats { grid-template-columns: repeat(4, 1fr); }

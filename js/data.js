@@ -10,6 +10,8 @@ export const DATA_VERSION = 1;
 
 export const MUSCLES = ["Back", "Chest", "Shoulders", "Biceps", "Triceps", "Legs", "Glutes", "Core", "Cardio", "Other"];
 export const KINDS = ["weight", "reps", "time"];
+/** How an exercise felt once its sets were done: it sets next time's weight (core.js effortChange) */
+export const EFFORTS = [{ id: "easy", label: "Easy" }, { id: "moderate", label: "Moderate" }, { id: "hard", label: "Hard" }, { id: "failed", label: "Failed" }];
 export const KIND_LABELS = { weight: "Weight × reps", reps: "Reps (body weight)", time: "Time" };
 export const COLORS = ["blue", "red", "green", "orange", "purple", "teal", "pink", "indigo"];
 
@@ -202,7 +204,8 @@ function normSession(s) {
     const sets = (Array.isArray(e.sets) ? e.sets : []).map(normSet).filter(Boolean);
     const note = str(e.note, 500).trim();
     return sets.length ? { ex: String(e.ex), name: str(e.name, 80), kind: KINDS.includes(e.kind) ? e.kind : "weight",
-      muscle: MUSCLES.includes(e.muscle) ? e.muscle : "Other", sets, ...(note ? { note } : {}) } : null;
+      muscle: MUSCLES.includes(e.muscle) ? e.muscle : "Other", sets, ...(note ? { note } : {}),
+      ...(EFFORTS.some((f) => f.id === e.effort) ? { effort: e.effort } : {}) } : null;
   }).filter(Boolean);
   const startMs = start ?? new Date(`${date}T12:00:00`).getTime();
   const dur = int(s.dur, 0, 86400, 0);

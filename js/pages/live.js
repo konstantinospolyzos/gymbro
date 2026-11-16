@@ -5,9 +5,9 @@
 
 import { h, s, icon, alertBox, actionSheet, toast, askText, selectOnFocus, darkStatusBar } from "../ui.js";
 import { store } from "../store.js";
-import { exerciseMap } from "../data.js";
+import { exerciseMap, EFFORTS } from "../data.js";
 import { clock, fmtKg, kg, fmtRest, parseNum, parseSecs, setShort, setText, timeUnit, fmtSecs, relDay, timeOfDay, plural,
-  supersets, linkNext, unlink, barOf, platesText, slip } from "../core.js";
+  supersets, linkNext, unlink, barOf, platesText, slip, effortChange } from "../core.js";
 import { TIPS } from "../library.js";
 import { startActive, completeSet, uncompleteSet, current, addRest, skipRest, restLeft, tick, counts, toSession, addSet, removeSet,
   addExercise, removeExercise, moveExercise, lastDoneAt, noteFor, setNote, notesChanged, notesToSave,
@@ -263,7 +263,8 @@ function exerciseCard(x, e, cur, ss) {
     ss ? h("div", { class: "ss-label" }, icon("link", 14), `Superset ${ss.label} · ${ss.pos + 1} of ${ss.size}`, h("span", { class: "muted" }, " · one set of each, then rest")) : null,
     h("div", { class: "ex-head" },
       h("div", { style: { flex: "1", minWidth: "0" } }, h("div", { class: "ex-title" }, ex?.name || x.name), h("div", { class: "ex-meta" }, meta),
-        x.up ? h("div", { class: "ex-up" }, icon("arrowUp", 14), `+${kg(x.up.kg)} today: last time every set hit ${x.up.reps}`) : null),
+        x.up ? h("div", { class: "ex-up" }, icon("arrowUp", 14), `+${kg(x.up.kg)} today: last time every set hit ${x.up.reps}`) : null,
+        x.felt ? feltLine(x.felt) : null),
       h("button", { type: "button", class: "icon-btn", "aria-label": `${ex?.name || "Exercise"}: more`, onclick: () => exerciseMenu(e) }, icon("more", 22))),
     noteBox(x, e, ex),
     h("div", { class: "sets" }, setHead(kind, unit), rows),
@@ -518,6 +519,40 @@ function commitSet(e, i) {
   const g = supersets(a.exercises)[e];
   const partner = g && next && next.e >= g.start && next.e <= g.end;
   if (next && next.e !== e) els.list.querySelector(`.ex-card[data-e="${next.e}"]`)?.scrollIntoView({ block: partner ? "nearest" : "start", behavior: "smooth" });
+  const x = a.exercises[e];
+  if (!x.effort && (exerciseMap(store.data).get(x.ex)?.kind || x.kind) !== "time" && x.sets.every((st) => st.done || st.warm)) askEffort(e);
+}
+
+/** Why today's weight changed: how the exercise felt last time */
+function feltLine(f) {
+  const why = f.effort === "failed" ? "it failed last time" : `it felt ${f.effort} last time`;
+  if (f.kg) return h("div", { class: `ex-up ${f.kg < 0 ? "down" : ""}` }, icon(f.kg > 0 ? "arrowUp" : "arrowDown", 14), `${f.kg > 0 ? "+" : "−"}${kg(Math.abs(f.kg))} today: ${why}`);
+  if (f.reps) return h("div", { class: `ex-up ${f.reps < 0 ? "down" : ""}` }, icon(f.reps > 0 ? "arrowUp" : "arrowDown", 14), `${f.reps > 0 ? "+" : "−"}${plural(Math.abs(f.reps), "rep")} a set today: ${why}`);
+  return h("div", { class: "ex-up same" }, icon("minus", 14), `Same as last time: ${why}`);
+}
+
+/** "How did it feel?" once an exercise's sets are done: easy, moderate, hard or failed sets next time's weight */
+async function askEffort(e) {
+  const a = A(), x = a?.exercises[e];
+  if (!x) return;
+  const ex = exerciseMap(store.data).get(x.ex);
+  const kind = ex?.kind || x.kind, step = ex?.step || 2.5;
+  const done = x.sets.filter((st) => st.done && !st.warm);
+  if (!done.length) return;
+  const top = Math.max(0, ...done.map((st) => st.w || 0));
+  const added = kind === "reps" ? "+" : "";
+  const next = (id) => {
+    const c = effortChange(id, done, kind, step);
+    if (c.kg) return `Next time ${added}${kg(top + c.kg)} (${c.kg > 0 ? "+" : "−"}${kg(Math.abs(c.kg))})`;
+    if (c.reps) return `Next time ${c.reps > 0 ? "+" : "−"}${plural(Math.abs(c.reps), "rep")} a set`;
+    return top ? `Next time ${added}${kg(top)} again` : "Next time the same";
+  };
+  const v = await actionSheet({ title: `How did ${ex?.name || x.name} feel?`, message: "Your answer sets next time's weight.", cancel: "Skip",
+    actions: EFFORTS.map((f) => ({ text: f.label, value: f.id, detail: next(f.id), checked: x.effort === f.id })) });
+  if (!v || A() !== a || !a.exercises.includes(x)) return;
+  x.effort = v;
+  save();
+  render();
 }
 
 function toggleDone(e, i) {
@@ -590,6 +625,8 @@ async function exerciseMenu(e) {
       x.sets.some((st) => st.warm && !st.done) ? { text: "Remove warm-up sets", value: "nowarm" } : null,
       nextX && !linkedNext ? { text: `Superset with ${exerciseMap(store.data).get(nextX.ex)?.name || nextX.name}`, value: "link" } : null,
       g ? { text: `Take out of superset ${g.label}`, value: "unlink" } : null,
+      kind !== "time" && (x.effort || x.sets.some((st) => st.done && !st.warm))
+        ? { text: x.effort ? `How it felt: ${EFFORTS.find((f) => f.id === x.effort).label}` : "How did it feel?", value: "effort" } : null,
       { text: `Rest for this exercise${x.rest !== null && x.rest !== undefined ? `: ${fmtRest(x.rest)}` : ""}`, value: "rest" },
       e > 0 ? { text: "Move up", value: "up" } : null,
       e < a.exercises.length - 1 ? { text: "Move down", value: "down" } : null,
@@ -599,6 +636,7 @@ async function exerciseMenu(e) {
   // played here: no leaving the workout for YouTube
   if (v === "video") { openVideo(x.ex, { name }); return; }
   if (v === "swap") { openSwap(e); return; }
+  if (v === "effort") { askEffort(e); return; }
   if (v === "warm") {
     if (!addWarmups(a, store.data, e)) {
       toast(x.sets.find((st) => !st.done)?.w ? "Light enough to start without warm-ups" : "Type the weight of your first set first: the warm-ups come from it");
@@ -685,9 +723,14 @@ async function finish() {
     if (v) discard(true);
     return;
   }
+  const early = done < total;
   const ok = await alertBox({ title: "Finish the workout?",
-    message: done < total ? `${plural(total - done, "set")} not ticked off ${total - done === 1 ? "isn't" : "aren't"} saved.` : `${plural(done, "set")} in ${clock(Date.now() - a.start)}.`,
-    buttons: [{ text: "Keep going", value: false, style: "cancel" }, { text: "Finish", value: true, style: "bold" }] });
+    message: early ? `${plural(total - done, "set")} not ticked off ${total - done === 1 ? "isn't" : "aren't"} saved. Or discard the whole workout: nothing from it is saved.`
+      : `${plural(done, "set")} in ${clock(Date.now() - a.start)}.`,
+    // finishing early: discarding it is one of the choices
+    buttons: early ? [{ text: "Finish and save", value: true, style: "bold" }, { text: "Discard workout", value: "discard", style: "destructive" }, { text: "Keep going", value: false, style: "cancel" }]
+      : [{ text: "Keep going", value: false, style: "cancel" }, { text: "Finish", value: true, style: "bold" }] });
+  if (ok === "discard" && A()) { discard(true); return; }
   if (!ok || !A()) return;
   let end = Date.now();
   const lastAt = lastDoneAt(a);

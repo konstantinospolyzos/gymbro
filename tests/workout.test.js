@@ -125,6 +125,44 @@ test("the top of the rep range in every set: next time the weight goes up", () =
   assert.deepEqual(a.exercises[1].sets.map((s) => s.w), [50, 50, 50]);
 });
 
+test("how it felt sets next time: easy +2 steps, moderate +1, hard the same, failed lighter", () => {
+  const T0 = NOW - 7 * 86400000;
+  const withEffort = (pull, row) => {
+    const d = applyOp(plan(), { type: "putSession", session: { id: "s1", date: "2026-11-02", start: T0, dur: 3600, workout: "rec-back", name: "Back", color: "blue",
+      exercises: [{ ex: "ex-lat-pulldown", name: "Lat pulldown", kind: "weight", muscle: "Back", sets: [{ w: 60, r: 12 }, { w: 60, r: 12 }, { w: 60, r: 13 }], ...(pull ? { effort: pull } : {}) },
+        { ex: "ex-chest-supported-row", name: "Chest-supported row", kind: "weight", muscle: "Back", sets: [{ w: 50, r: 10 }, { w: 50, r: 9 }], ...(row ? { effort: row } : {}) }] } });
+    return startActive(d, d.workouts[0], NOW);
+  };
+  const work = (x) => x.sets.filter((s) => !s.warm).map((s) => [s.w, s.r]);
+  // the pulldown's step is 5 kg; the row's 2.5: with an answer, back to the bottom of the range
+  let a = withEffort("easy", "moderate");
+  assert.deepEqual(a.exercises[0].felt, { effort: "easy", kg: 10, reps: 0 });
+  assert.deepEqual(work(a.exercises[0]), [[70, 8], [70, 8], [70, 8]]);
+  assert.equal(a.exercises[0].up, null, "the answer decides, not the reps");
+  assert.deepEqual(work(a.exercises[1]).map(([w]) => w), [52.5, 52.5, 52.5]);
+  // hard: the same weight and reps, even with every set at the top of the range
+  a = withEffort("hard", "failed");
+  assert.deepEqual(a.exercises[0].felt, { effort: "hard", kg: 0, reps: 0 });
+  assert.deepEqual(work(a.exercises[0]).map(([w]) => w), [60, 60, 60]);
+  // failed: about 5% lighter, at least one step
+  assert.deepEqual(a.exercises[1].felt, { effort: "failed", kg: -2.5, reps: 0 });
+  assert.deepEqual(work(a.exercises[1]).map(([w]) => w), [47.5, 47.5, 47.5]);
+  // no answer: as before (every set at the top of 8–12: +5 kg)
+  a = withEffort(null, null);
+  assert.equal(a.exercises[0].felt, null);
+  assert.deepEqual(a.exercises[0].up, { kg: 5, reps: 12 });
+  // the answer is kept with the workout
+  a.exercises[1].effort = "moderate";
+  for (const x of a.exercises) for (const st of x.sets) { st.done = true; }
+  const s = toSession(a, plan(), NOW + 3600000);
+  assert.equal(s.exercises.find((e) => e.ex === "ex-chest-supported-row").effort, "moderate");
+  assert.equal(s.exercises.find((e) => e.ex === "ex-lat-pulldown").effort, undefined);
+  const kept = applyOp(plan(), { type: "putSession", session: s }).sessions[0];
+  assert.equal(kept.exercises.find((e) => e.ex === "ex-chest-supported-row").effort, "moderate");
+  assert.equal(applyOp(plan(), { type: "putSession", session: { ...s, exercises: s.exercises.map((e) => ({ ...e, effort: "meh" })) } })
+    .sessions[0].exercises.some((e) => e.effort), false);
+});
+
 test("notes: typed in a workout they go to the exercise, and the workout keeps what was written that day", () => {
   let d = plan();
   const back = d.workouts.find((w) => w.id === "rec-back");

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { emptyData, applyOp, normalize, sampleOp, hasContent } from "../js/data.js";
 import { e1rm, parseNum, parseSecs, fmtKg, fmtNum, clock, fmtRest, fmtDuration, compareSession, streak, weekly, recordsIn,
   previousSession, exStats, changeOf, muscleSplit, expectedMinutes, relDay, parseDay, recordCounts, exerciseSummaries, setText, slip,
-  plannedWith, weekMuscles, volumeOf } from "../js/core.js";
+  plannedWith, weekMuscles, volumeOf, effortChange } from "../js/core.js";
 import { VOLUME_MUSCLES } from "../js/library.js";
 
 const withPlan = () => applyOp(emptyData(), sampleOp(emptyData()));
@@ -207,4 +207,19 @@ test("sets a week per muscle with a workout as it's being edited", () => {
     assert.equal(get(twice, m), sum(rest, m) + 2 * back, m);
     assert.equal(get(wed, m), sum(noLegs, m) + 2 * back, m);
   }
+});
+
+test("how an exercise felt, as next time's change", () => {
+  const sets = (w, r = 10) => [{ w, r }, { w, r }];
+  const all = (s, kind = "weight", step = 2.5) => ["easy", "moderate", "hard", "failed"].map((e) => effortChange(e, s, kind, step));
+  assert.deepEqual(all(sets(60)), [{ kg: 5, reps: 0 }, { kg: 2.5, reps: 0 }, { kg: 0, reps: 0 }, { kg: -2.5, reps: 0 }]);
+  assert.deepEqual(all(sets(100)).at(-1), { kg: -5, reps: 0 }, "failed: 5% of 100");
+  assert.deepEqual(all(sets(20), "weight", 2).at(-1), { kg: -2, reps: 0 }, "failed: at least one step");
+  assert.deepEqual(all(sets(2.5)).at(-1), { kg: -2.5, reps: 0 }, "never below nothing");
+  // bodyweight: reps a set; with added kilos: the kilos
+  assert.deepEqual(all(sets(null, 8), "reps"), [{ kg: 0, reps: 2 }, { kg: 0, reps: 1 }, { kg: 0, reps: 0 }, { kg: 0, reps: -2 }]);
+  assert.deepEqual(all(sets(10, 8), "reps", 2.5)[1], { kg: 2.5, reps: 0 });
+  // timed, or no answer: nothing
+  assert.deepEqual(effortChange("easy", [{ s: 60 }], "time"), { kg: 0, reps: 0 });
+  assert.deepEqual(effortChange(undefined, sets(60), "weight"), { kg: 0, reps: 0 });
 });

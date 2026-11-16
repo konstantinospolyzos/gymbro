@@ -4,7 +4,7 @@
 import { exerciseMap, bySessionStart, uid, DEFAULT_SETTINGS } from "./data.js";
 import { PATTERN, BARBELL, VOLUME, VOLUME_MUSCLES } from "./library.js";
 
-export const APP_VERSION = "1.20";
+export const APP_VERSION = "1.21";
 
 // ---------------------------------------------------------------------------
 // Dates (local time; a workout's "date" is the day it started)
@@ -212,6 +212,23 @@ export function historyIndex(data) {
 }
 
 export const exerciseHistory = (data, exId) => historyIndex(data).get(exId) || [];
+
+/**
+ * Next time's change after how an exercise felt (you said so once its sets were done): easy two weight steps
+ * up, moderate one, hard the same, failed about 5% lighter (at least one step). Bodyweight without added
+ * kilos: reps a set instead (+2, +1, the same, −2). Timed exercises: nothing. {kg, reps}
+ */
+export function effortChange(effort, sets, kind, step = 2.5) {
+  const none = { kg: 0, reps: 0 };
+  if (kind === "time" || !["easy", "moderate", "hard", "failed"].includes(effort)) return none;
+  const top = Math.max(0, ...sets.map((s) => s.w || 0));
+  if (top > 0) {
+    const down = Math.min(top, Math.max(step, Math.round((top * 0.05) / step) * step));
+    const kg = { easy: 2 * step, moderate: step, hard: 0, failed: -down }[effort];
+    return { kg: Math.round(kg * 100) / 100, reps: 0 };
+  }
+  return kind === "reps" ? { kg: 0, reps: { easy: 2, moderate: 1, hard: 0, failed: -2 }[effort] } : none;
+}
 
 /** The last time an exercise was done before a moment (a session start) */
 export function lastFor(data, exId, before = Infinity, skipId = null) {

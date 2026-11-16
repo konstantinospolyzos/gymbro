@@ -3,7 +3,7 @@
 // sleeps, the screen locks or the app is closed and opened again.
 
 import { uid, exerciseMap } from "./data.js";
-import { lastFor, isoDay, warmupSets, barOf, supersets } from "./core.js";
+import { lastFor, isoDay, warmupSets, barOf, supersets, effortChange } from "./core.js";
 import { COMPOUND } from "./library.js";
 
 /** The rest after a warm-up set */
@@ -23,8 +23,12 @@ function exerciseBlock(data, exId, item, now) {
   const n = item ? item.sets : Math.max(last ? last.entry.sets.length : 3, 1);
   // never done and not in the plan: start from a usual set
   if (!item && !last) item = { sets: n, reps: ex?.kind === "time" ? null : 10, w: null, secs: ex?.kind === "time" ? (ex.muscle === "Cardio" ? 1200 : 60) : null };
-  // reps as a range (8–12): when every set reached the top last time, add weight and start again from the bottom
-  const up = item?.hi && (ex?.kind || "weight") === "weight" && last && last.entry.sets.length
+  // how it felt last time sets today's weight: easy more, moderate a step, hard the same, failed lighter
+  const kind = ex?.kind || last?.entry.kind || "weight";
+  const effort = last?.entry.effort && kind !== "time" ? last.entry.effort : null;
+  const felt = effort ? { effort, ...effortChange(effort, last.entry.sets, kind, ex?.step || 2.5) } : null;
+  // without an answer, reps as a range (8–12): when every set reached the top, add weight and start again from the bottom
+  const up = !felt && item?.hi && (ex?.kind || "weight") === "weight" && last && last.entry.sets.length
     && last.entry.sets.every((s) => (s.r || 0) >= item.hi && (s.w || 0) > 0) ? (ex?.step || 2.5) : null;
   return {
     key: uid("b"), ex: exId, kind: ex?.kind || "weight", name: ex?.name || "Exercise",
@@ -32,11 +36,14 @@ function exerciseBlock(data, exId, item, now) {
     ...(item?.group ? { group: item.group } : {}),
     target: item ? { sets: item.sets, reps: item.reps, hi: item.hi ?? null, w: item.w, secs: item.secs } : null,
     up: up ? { kg: up, reps: item.hi } : null,
+    felt,
     prev: last ? last.entry.sets.map((s) => ({ ...s })) : [],
     prevDate: last ? last.session.date : null,
     sets: Array.from({ length: n }, (_, i) => {
       let v = prefill(data, exId, i, item, now);
       if (up && v.w) v = { ...v, w: Math.round((v.w + up) * 100) / 100, r: item.reps };
+      if (felt?.kg && v.w > 0) v = { ...v, w: Math.max(0, Math.round((v.w + felt.kg) * 100) / 100), r: item?.reps ?? v.r };
+      if (felt?.reps && v.r) v = { ...v, r: Math.max(1, v.r + felt.reps) };
       return { ...v, orig: { ...v }, done: false, at: null };
     }),
   };
@@ -355,7 +362,8 @@ export function toSession(active, data, end = Date.now()) {
     const kind = ex?.kind || x.kind;
     const sets = x.sets.filter((s) => s.done && !s.warm).map((s) => cleanSet(kind, s));
     const note = changedToday(x) ? x.note.trim() : "";
-    return sets.length ? { ex: x.ex, name: ex?.name || x.name, kind, muscle: ex?.muscle || "Other", sets, ...(note ? { note } : {}) } : null;
+    return sets.length ? { ex: x.ex, name: ex?.name || x.name, kind, muscle: ex?.muscle || "Other", sets, ...(note ? { note } : {}),
+      ...(x.effort && kind !== "time" ? { effort: x.effort } : {}) } : null;
   }).filter(Boolean);
   if (!exercises.length) return null;
   return {

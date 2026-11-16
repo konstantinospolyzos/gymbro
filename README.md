@@ -10,7 +10,9 @@ Your gym week on your phone, in the same iOS look as the Savings Tracker and Glo
   16–19, never over 20); a test checks it
 - **Today:** today's workout, one tap to start
 - **The workout:** a clock for the whole workout, one big **Set done** button, then the rest counts down and beeps
-  (and flashes) in its last 5 seconds so you're ready for the next set; weights start from last time. A number far
+  (and flashes) in its last 5 seconds so you're ready for the next set; weights start from last time. After an
+  exercise's last set, "How did it feel?" (Easy, Moderate, Hard, Failed) sets next time's weight: two steps up, one
+  step up, the same, or about 5% lighter. Finishing early you can also discard the workout. A number far
   off from usual (800 kg for 80, 100 reps for 10) is asked about once when you log the set: "800 kg?"
 - **In the gym:** warm-up sets for the first heavy lift, the plates for each side of the bar, supersets (one set of
   each in turn, then rest), swap an exercise for a similar one when the machine is taken (or ask Claude for one
