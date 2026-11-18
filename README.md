@@ -9,7 +9,9 @@ Your gym week on your phone, in the same iOS look as the Savings Tracker and Glo
   (the least that builds muscle), and more with more days (3 days about 10–12, 4 days 12–14, 5 days 14–17, 6 days
   16–19, never over 20); a test checks it
 - **Today:** today's workout, one tap to start
-- **The workout:** a clock for the whole workout, one big **Set done** button, then the rest counts down and beeps
+- **The workout:** a clock for the whole workout, and under it about how long is left (the sets still to do at your
+  usual time per set, rest included, from your last times of that workout; today's pace counts more as you go),
+  one big **Set done** button, then the rest counts down and beeps
   (and flashes) in its last 5 seconds so you're ready for the next set; weights start from last time. After an
   exercise's last set, "How did it feel?" (Easy, Moderate, Hard, Failed) sets next time's weight: two steps up, one
   step up, the same, or about 5% lighter. Finishing early you can also discard the workout. A number far

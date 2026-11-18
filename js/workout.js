@@ -317,6 +317,40 @@ export function lastDoneAt(active) {
   return t || null;
 }
 
+/** How long a set takes you, in seconds, rest included: a workout's time over its sets, the middle value of your
+ *  last five times of this workout (of your last ten workouts when it's new). Workouts logged by hand, short ones
+ *  and ones left running don't count. null when there's nothing to go by. */
+export function setPace(data, workoutId, before = Infinity) {
+  const runs = data.sessions.filter((s) => !s.manual && s.start < before).map((s) => {
+    const sets = s.exercises.reduce((n, x) => n + x.sets.length, 0);
+    return sets >= 3 ? { s, secs: s.dur / sets } : null;
+  }).filter((r) => r && r.secs >= 20 && r.secs <= 600);
+  const same = workoutId ? runs.filter((r) => r.s.workout === workoutId) : [];
+  const pick = (same.length ? same : runs).sort((a, b) => b.s.start - a.s.start).slice(0, same.length ? 5 : 10)
+    .map((r) => r.secs).sort((a, b) => a - b);
+  if (!pick.length) return null;
+  const m = pick.length >> 1;
+  return pick.length % 2 ? pick[m] : (pick[m - 1] + pick[m]) / 2;
+}
+
+/** About how long the workout has left, in ms: the sets still to do (warm-ups aside) at your time per set. As you
+ *  log sets, today's pace counts more and more; the set you're on counts what's left of it, and never less than
+ *  the rest still running. null when every set is done. */
+export function timeLeft(active, pace, now = Date.now()) {
+  const { done, total } = counts(active);
+  const left = total - done;
+  if (left <= 0) return null;
+  const usual = pace ?? 60 + (active.rest ?? 90);
+  const last = lastDoneAt(active);
+  const today = done && last ? (last - active.start) / 1000 / done : null;
+  const weight = pace ? 4 : 1;          // how many of today's sets your usual pace is worth
+  const per = today === null ? usual : (usual * weight + today * done) / (weight + done);
+  const since = (now - (last ?? active.start)) / 1000;
+  const rest = active.resting ? Math.max(0, active.resting.until - now) / 1000 : 0;
+  const thisOne = Math.max(per - since, rest + 30, 30);
+  return Math.round(((left - 1) * per + thisOne) * 1000);
+}
+
 // ---------------------------------------------------------------------------
 // Notes: each exercise has its own (seat height, grip, what to try next), shown and changed in every workout
 // ---------------------------------------------------------------------------

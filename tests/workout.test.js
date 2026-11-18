@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emptyData, applyOp, sampleOp, exerciseMap } from "../js/data.js";
 import { startActive, completeSet, current, nextAfter, tick, addRest, restLeft, toSession, addSet, removeSet, counts,
-  addExercise, prefill, skipRest, uncompleteSet, noteFor, setNote, notesChanged, notesToSave, usualFor } from "../js/workout.js";
+  addExercise, prefill, skipRest, uncompleteSet, noteFor, setNote, notesChanged, notesToSave, usualFor, setPace, timeLeft } from "../js/workout.js";
 
 const plan = () => applyOp(emptyData(), sampleOp(emptyData()));
 const NOW = new Date("2026-11-09T18:00:00").getTime();
@@ -220,4 +220,40 @@ test("what a set usually is: today's sets first, else last time's and the plan's
   assert.deepEqual(usualFor(x, 3), { w: 85, r: 7 });
   // never done, no plan: nothing to compare with
   assert.deepEqual(usualFor({ target: null, prev: [], sets: [set(null, null)] }, 0), { w: null, r: null });
+});
+
+test("your time per set: the middle of your last times of this workout, with their rest", () => {
+  const d = plan();
+  assert.equal(setPace(d, "rec-back"), null);                          // nothing to go by yet
+  let n = 0;
+  const run = (workout, perSet, sets = 10, more = {}) => d.sessions.push({ id: `s${++n}`, start: NOW - (100 - n) * 86400000,
+    dur: perSet * sets, workout, exercises: [{ ex: "x", sets: Array.from({ length: sets }, () => ({ w: 50, r: 8 })) }], ...more });
+  run("rec-legs", 240);
+  assert.equal(setPace(d, "rec-back"), 240);                           // a new workout: your other workouts
+  run("rec-back", 150); run("rec-back", 200); run("rec-back", 180);
+  assert.equal(setPace(d, "rec-back"), 180);                           // this one's, once you've done it
+  run("rec-back", 90, 10, { manual: true });                           // logged by hand: no real time
+  run("rec-back", 60, 2);                                              // two sets
+  run("rec-back", 1000);                                               // left running over the night
+  assert.equal(setPace(d, "rec-back"), 180);
+  run("rec-back", 100); run("rec-back", 100); run("rec-back", 100);
+  assert.equal(setPace(d, "rec-back"), 100);                           // the last five: 100 100 100 180 200
+  assert.equal(setPace(d, null), 150);                                 // an empty workout: your last ten of any
+});
+
+test("time left: the sets to do at your pace, today's pace counting more as you go", () => {
+  const d = plan();
+  const a = startActive(d, d.workouts.find((w) => w.id === "rec-back"), NOW);   // 13 sets, rest 2 min
+  assert.equal(timeLeft(a, null, NOW), 13 * 180 * 1000);               // no history: a minute a set and its rest
+  assert.equal(timeLeft(a, 150, NOW), 13 * 150 * 1000);
+  assert.equal(timeLeft(a, 150, NOW + 30000), (12 * 150 + 120) * 1000);   // it counts down while you lift
+  // the first set took 100 s against your usual 200: a fifth of the way to today's pace
+  completeSet(a, 0, 0, NOW + 100000);
+  const per = (200 * 4 + 100) / 5;
+  assert.equal(timeLeft(a, 200, NOW + 100000), (11 * per + per) * 1000);
+  // a rest longer than your usual set: the next set comes after it
+  assert.equal(timeLeft(a, 60, NOW + 100000), (11 * 68 + 120 + 30) * 1000);
+  // every set done: nothing left
+  for (const [e, x] of a.exercises.entries()) x.sets.forEach((_, s) => completeSet(a, e, s, NOW + 200000));
+  assert.equal(timeLeft(a, 200, NOW + 200000), null);
 });

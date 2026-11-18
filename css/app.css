@@ -591,6 +591,7 @@ button.meta-chip:active { opacity: 0.6; }
 .live-name .dot { flex: none; }
 .live-name-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .live-clock { font-family: var(--rounded); font-size: 34px; line-height: 1.05; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+.live-left { min-height: 16px; font-size: 13px; line-height: 16px; font-weight: 600; color: var(--gray); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .live-finish { min-width: 76px; height: 36px; padding: 0 14px; border-radius: 18px; background: var(--green); color: #000; font-weight: 700; font-size: 15px; }
 .live-finish:active { opacity: 0.7; }
 .live-min { width: 76px; display: flex; }

@@ -6,12 +6,12 @@
 import { h, s, icon, alertBox, actionSheet, faceSheet, toast, askText, selectOnFocus, darkStatusBar } from "../ui.js";
 import { store } from "../store.js";
 import { exerciseMap, EFFORTS } from "../data.js";
-import { clock, fmtKg, kg, fmtRest, parseNum, parseSecs, setShort, setText, timeUnit, fmtSecs, relDay, timeOfDay, plural,
+import { clock, fmtKg, kg, fmtRest, fmtDuration, parseNum, parseSecs, setShort, setText, timeUnit, fmtSecs, relDay, timeOfDay, plural,
   supersets, linkNext, unlink, barOf, platesText, slip, effortChange } from "../core.js";
 import { TIPS } from "../library.js";
 import { startActive, completeSet, uncompleteSet, current, addRest, skipRest, restLeft, tick, counts, toSession, addSet, removeSet,
   addExercise, removeExercise, moveExercise, lastDoneAt, noteFor, setNote, notesChanged, notesToSave,
-  addWarmups, removeWarmups, warmCount, workIndex, swapExercise, retargetRest, usualFor } from "../workout.js";
+  addWarmups, removeWarmups, warmCount, workIndex, swapExercise, retargetRest, usualFor, setPace, timeLeft } from "../workout.js";
 import { unlock, scheduleCountdown, cancelCountdown, keepAwake, haptic, playFinish } from "../sound.js";
 import { NO, chooseRest, restLabel, restForAll } from "./common.js";
 import { openExercisePicker, openSwapPicker } from "./editors.js";
@@ -22,6 +22,7 @@ import { afterWorkout } from "./strava.js";
 let root = null, mini = null, timer = null;
 const els = {};
 let shownSecond = null;
+let pace = { id: null, secs: null };   // your time per set, worked out once per workout
 let listStale = false;          // the list waits while you type (rebuilding it would close the keyboard)
 const RING_R = 58, RING_C = 2 * Math.PI * RING_R;
 const TYPING = ".set-input, .ex-note";
@@ -153,6 +154,7 @@ function loop() {
   }
   if (isOpen()) {
     els.clock.textContent = clock(now - a.start);
+    updateLeft(now);
     if (a.resting) updateRest(now);
   }
   updateMini(now);
@@ -171,6 +173,7 @@ function build() {
   root = h("div", { class: "live dark-scope hidden", role: "dialog", "aria-modal": "true", "aria-label": "Workout" });
   els.name = h("div", { class: "live-name" });
   els.clock = h("div", { class: "live-clock", role: "timer", "aria-label": "Workout time" }, "0:00");
+  els.left = h("div", { class: "live-left" });
   els.barFill = h("span");
   els.list = h("div", { class: "live-scroll" });
   els.dock = h("div", { class: "dock" });
@@ -178,7 +181,7 @@ function build() {
   root.append(
     h("div", { class: "live-top" },
       h("div", { class: "live-min" }, h("button", { type: "button", class: "icon-btn", "aria-label": "Show the app", onclick: minimize }, icon("chevronDown", 22))),
-      h("div", { class: "live-title" }, els.name, els.clock),
+      h("div", { class: "live-title" }, els.name, els.clock, els.left),
       h("button", { type: "button", class: "live-finish", onclick: finish }, "Finish")),
     h("div", { class: "live-bar" }, els.barFill),
     els.list, els.dock, els.flash);
@@ -203,8 +206,18 @@ function render() {
   root.style.setProperty("--wc", `var(--w-${a.color})`);
   els.name.replaceChildren(h("span", { class: `dot c-${a.color}` }), h("span", { class: "live-name-text" }, a.name));
   els.clock.textContent = clock(Date.now() - a.start);
+  updateLeft(Date.now());
   renderList();
   renderDock();
+}
+
+/** Under the clock: about how long is left, from your time per set and the sets still to do */
+function updateLeft(now) {
+  const a = A();
+  if (pace.id !== a.id) pace = { id: a.id, secs: setPace(store.data, a.workout) };
+  const ms = timeLeft(a, pace.secs, now);
+  const text = ms === null ? "" : `About ${fmtDuration(Math.max(1, Math.ceil(ms / 60000)) * 60)} left`;
+  if (els.left.textContent !== text) els.left.textContent = text;
 }
 
 function setHead(kind, unit) {
