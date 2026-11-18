@@ -46,7 +46,8 @@
   color-scheme: dark;
 }
 
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* manipulation: no double-tap zoom, so quick taps on − and + are taps (scrolling and pinch zoom still work) */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 html.locked, html.locked body { overflow: hidden; }
 body {
@@ -54,7 +55,7 @@ body {
   font: 15px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased; overscroll-behavior-y: none;
 }
-button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; -webkit-user-select: none; user-select: none; }
 button:disabled { cursor: default; }
 input, textarea, select { font: inherit; color: inherit; }
 .icon { display: inline-flex; align-items: center; justify-content: center; flex: none; }
