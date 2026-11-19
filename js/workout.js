@@ -3,7 +3,7 @@
 // sleeps, the screen locks or the app is closed and opened again.
 
 import { uid, exerciseMap } from "./data.js";
-import { lastFor, isoDay, warmupSets, barOf, supersets, effortChange } from "./core.js";
+import { lastFor, isoDay, warmupSets, barOf, supersets, effortChange, sessionStats } from "./core.js";
 import { COMPOUND } from "./library.js";
 
 /** The rest after a warm-up set */
@@ -389,6 +389,13 @@ const cleanSet = (kind, { w, r, s }) => (kind === "time" ? { s: s ?? 0 } : kind 
 
 /** The finished workout as a logged session (only the sets that were done), or null if nothing was done.
  *  A note written or changed today goes with it, so History shows what you noted that day. */
+/** The kilos lifted so far: weight × reps of the work sets done, counted just as the saved workout will be
+ *  (warm-ups and timed exercises aside, bodyweight ones by their added kg) */
+export function volumeSoFar(active, data) {
+  const s = toSession(active, data, active.start);
+  return s ? sessionStats(s).volume : 0;
+}
+
 export function toSession(active, data, end = Date.now()) {
   const exMap = exerciseMap(data);
   const exercises = active.exercises.map((x) => {

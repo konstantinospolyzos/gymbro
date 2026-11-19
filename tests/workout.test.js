@@ -2,8 +2,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emptyData, applyOp, sampleOp, exerciseMap } from "../js/data.js";
+import { sessionStats } from "../js/core.js";
 import { startActive, completeSet, current, nextAfter, tick, addRest, restLeft, toSession, addSet, removeSet, counts,
-  addExercise, prefill, skipRest, uncompleteSet, noteFor, setNote, notesChanged, notesToSave, usualFor, setPace, timeLeft } from "../js/workout.js";
+  addExercise, prefill, skipRest, uncompleteSet, noteFor, setNote, notesChanged, notesToSave, usualFor, setPace, timeLeft, volumeSoFar } from "../js/workout.js";
 
 const plan = () => applyOp(emptyData(), sampleOp(emptyData()));
 const NOW = new Date("2026-11-09T18:00:00").getTime();
@@ -256,4 +257,18 @@ test("time left: the sets to do at your pace, today's pace counting more as you 
   // every set done: nothing left
   for (const [e, x] of a.exercises.entries()) x.sets.forEach((_, s) => completeSet(a, e, s, NOW + 200000));
   assert.equal(timeLeft(a, 200, NOW + 200000), null);
+});
+
+test("kilos so far: the work sets done, weight × reps, as the saved workout counts them", () => {
+  const d = plan();
+  const a = startActive(d, d.workouts.find((w) => w.id === "rec-back"), NOW);
+  assert.equal(volumeSoFar(a, d), 0);                                   // nothing done yet
+  const x = a.exercises[0];
+  Object.assign(x.sets[0], { w: 60, r: 10 }); completeSet(a, 0, 0, NOW + 60000);
+  Object.assign(x.sets[1], { w: 62.5, r: 8 }); completeSet(a, 0, 1, NOW + 180000);
+  Object.assign(x.sets[2], { w: 100, r: 10 });                          // not done: doesn't count
+  assert.equal(volumeSoFar(a, d), 600 + 500);
+  x.sets.unshift({ w: 30, r: 10, done: true, warm: true, at: NOW });    // a warm-up: doesn't count either
+  assert.equal(volumeSoFar(a, d), 1100);
+  assert.equal(volumeSoFar(a, d), sessionStats(toSession(a, d, NOW + 600000)).volume);
 });
