@@ -855,6 +855,10 @@ button.meta-chip:active { opacity: 0.6; }
 .alt-tip { margin: 8px 0 0; display: flex; gap: 8px; font-size: 14.5px; line-height: 1.4; color: var(--gray); }
 .alt-tip .icon { flex: none; margin-top: 2px; color: var(--blue); }
 .alt-buttons { display: flex; gap: 10px; margin-top: 12px; }
+/* Claude's pick for a rest day (1.26) */
+.pick-card { gap: 12px; }
+.pick-card .alt-why, .pick-card .alt-tip { margin: 0; }
+.pick-card .start-btn { margin-top: 4px; }
 .alt-buttons .btn { flex: 1; min-height: 44px; padding: 10px 14px; }
 
 /* Recommend a week: what each muscle gets */

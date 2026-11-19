@@ -12,6 +12,7 @@ import { startWorkout, openLive } from "./live.js";
 import { openSessionDetail } from "./history.js";
 import { openWorkoutEditor } from "./editors.js";
 import { openRecommended, openWeekRecommender } from "./recommend.js";
+import { openTodayCoach } from "./coach.js";
 
 function exerciseList(data, w) {
   const exMap = exerciseMap(data);
@@ -103,6 +104,9 @@ function restCard(data) {
     h("div", { class: "rest-day" }, h("span", { class: "rest-icon" }, icon("moon", 26)),
       h("div", { class: "hero-text" }, h("div", { class: "caption" }, "Rest day"), h("div", { class: "hero-name", style: { fontSize: "22px" } }, "Nothing planned today"),
         next ? h("div", { class: "muted", style: { marginTop: "4px" } }, `Next: ${next.when} · ${next.w.name}`) : null)),
+    // want to train anyway: Claude picks what fits the week
+    data.workouts.length ? h("button", { type: "button", class: "btn primary wide ask-today", onclick: () => openTodayCoach({ onStart: (w) => startWorkout(w) }) },
+      icon("sparkle", 18), "What should I do today?") : null,
     h("div", { class: "button-row" },
       h("button", { type: "button", class: "btn tinted", onclick: () => startOther() }, icon("play", 16), "Train anyway"),
       h("button", { type: "button", class: "btn gray", onclick: () => openRecommended() }, icon("sparkle", 16), "Recommended")));

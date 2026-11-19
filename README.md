@@ -30,8 +30,10 @@ Your gym week on your phone, in the same iOS look as the Savings Tracker and Glo
   10–20, body weight, records, lifts that stopped going up (and what helps), and each exercise's best set over time
 - **Ask Claude:** feedback on a workout in your plan (with your whole week and the last times) or on one you just
   did, or on your whole week (Plan › Ask Claude to check my week: Claude proposes better exercises, order and sets,
-  and you see each workout's changes and choose what to use, with undo): in the Claude app, or right in GymBro with
-  your own Anthropic API key (Settings › Claude)
+  and you see each workout's changes and choose what to use, with undo), or on a rest day, what to do if you want
+  to train anyway (Today › What should I do today?: Claude looks at the last 7 days, the next 6 and the workouts
+  you skipped this week, and picks one of your workouts to start, or rest): in the Claude app, or right in GymBro
+  with your own Anthropic API key (Settings › Claude)
 - **Strava:** each workout goes up when you finish it as a Weight Training activity with every set (Strava shows
   the exercises, the volume and its muscle map), with the hard sets per muscle in the description;
   workouts from before go up from Settings › Strava or History. Without a signal it waits until you're back online.

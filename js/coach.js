@@ -4,7 +4,8 @@
 
 import { exerciseMap, uid } from "./data.js";
 import { WEEKDAYS, WEEK_ORDER, repRange, fmtRest, fmtSecs, timeUnit, setShort, exerciseHistory, compareSession, weekMuscles,
-  plateaus, supersets, shortDate, parseDay, timeOfDay, fmtDuration, fmtKg, today, addDays, isoDay, workoutSets, bodyTrend } from "./core.js";
+  plateaus, supersets, shortDate, parseDay, timeOfDay, fmtDuration, fmtKg, today, addDays, isoDay, workoutSets, bodyTrend,
+  startOfWeek, volumeOf, expectedMinutes } from "./core.js";
 import { VOLUME_MUSCLES } from "./library.js";
 
 export const MODEL = "claude-sonnet-5-5";
@@ -441,15 +442,16 @@ export async function askClaudePlan(apiKey, messages, opts = {}) {
   return { input, content: r.content };
 }
 
-/** JSON from a pasted answer (the ```json block at its end, or the JSON itself) with a list under `key` */
-export function jsonFromText(text, key) {
+/** JSON from a pasted answer (the ```json block at its end, or the JSON itself) with a list under `key`
+ *  (or what `test` accepts) */
+export function jsonFromText(text, key, test = Array.isArray) {
   const t = String(text || "");
   const blocks = [...t.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map((m) => m[1]);
   const tries = [...blocks.reverse(), t, t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1)];
   for (const c of tries) {
     try {
       const v = JSON.parse(c.trim());
-      if (v && Array.isArray(v[key])) return v;
+      if (v && test(v[key])) return v;
     } catch { /* the next one */ }
   }
   return null;
@@ -622,4 +624,147 @@ export function alternativesFrom(data, input, { exId = null, exclude = [] } = {}
     list.push({ id: ex.id, name: ex.name, why: String(a.why || "").trim(), tip: String(a.tip || "").trim() });
   }
   return { note: String(input?.note || "").trim(), list: list.slice(0, 4) };
+}
+
+// ---------------------------------------------------------------------------
+// A rest day, but you want to train: Claude picks what fits today (one of your workouts, or rest after all)
+// from the days around it (what you did, what's coming) and the workouts you skipped this week.
+// ---------------------------------------------------------------------------
+export const TODAY_INSTRUCTIONS = `You are an experienced strength coach. The lifter tracks their training in GymBro, a gym app. Today is a
+rest day in their plan, but they want to go to the gym anyway. Decide what they should do today: one of
+their workouts, or rest after all.
+
+How to judge, in this order:
+- Protect the days ahead: don't pick a workout that hits muscles hard that a workout in the next day or two
+  trains hard too, so they come to it recovered (a muscle needs about 48 hours after hard work).
+- Respect recovery: avoid muscles trained hard yesterday or the day before.
+- A workout they skipped this week comes first when it fits: it brings the week back on track.
+- Otherwise fill the gaps: the muscles furthest behind this week (done so far against the 10–20 hard sets a
+  week target), counting what's still planned for the rest of the week.
+- If they've trained many days in a row, or every workout would hurt the days ahead, say rest (null), or
+  pick the gentlest workout and say how to keep it light in the tip.
+- Respect what they tell you (time, soreness, pain).
+
+Answer for the lifter, in plain words:
+- "workout": the id of one of their workouts, exactly as given, or null to rest.
+- "why": two or three short sentences, naming the days and workouts it's about.
+- "tip": one short sentence to adjust today's workout (an exercise to drop because a muscle is needed
+  tomorrow, fewer sets to fit their time), or empty.
+- "plan": one short sentence if the rest of the week should change (e.g. move a workout), or empty.`;
+
+/** The shape of Claude's answer (structured output) */
+export const TODAY_SCHEMA = {
+  type: "object", additionalProperties: false,
+  required: ["workout", "why", "tip", "plan"],
+  properties: {
+    workout: { type: ["string", "null"], description: "The id of the workout to do today, as given (e.g. w-legs), or null to rest" },
+    why: { type: "string", description: "Why, in two or three short sentences" },
+    tip: { type: "string", description: "One short sentence to adjust today's workout, or empty" },
+    plan: { type: "string", description: "One short sentence about the rest of the week, or empty" },
+  },
+};
+
+const r1 = (n) => Math.round(n * 2) / 2;
+
+/** Hard sets per muscle in a list of {ex, sets}: "Quads 6, Glutes 3" (biggest first) */
+function musclesOf(data, list) {
+  const exMap = exerciseMap(data), m = new Map();
+  for (const { ex, sets } of list) for (const [k, f] of Object.entries(volumeOf(ex, exMap.get(ex)))) m.set(k, (m.get(k) || 0) + sets * f);
+  return [...m].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${fmtKg(r1(n))}`).join(", ");
+}
+
+/** Each workout planned on a day of this week before today and not done on any day of it -> [{w, missed}] */
+export function skippedThisWeek(data, now = today()) {
+  const from = startOfWeek(now), iso = isoDay(now);
+  const planned = new Map(), done = new Map();
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(from, i);
+    if (isoDay(d) >= iso) break;
+    const id = data.schedule[String(d.getDay())];
+    if (id) planned.set(id, (planned.get(id) || 0) + 1);
+  }
+  for (const s of data.sessions) if (s.workout && s.date >= isoDay(from) && s.date < iso) done.set(s.workout, (done.get(s.workout) || 0) + 1);
+  return [...planned].map(([id, n]) => ({ w: data.workouts.find((x) => x.id === id), missed: n - (done.get(id) || 0) }))
+    .filter((x) => x.w && x.missed > 0);
+}
+
+/** What Claude is told: the last seven days and the next six around today, the workouts skipped this week,
+ *  every workout you have with what it trains, and the hard sets per muscle so far this week */
+export function todayReport(data, now = today()) {
+  const exMap = exerciseMap(data);
+  const day = (d) => shortDate(d);                    // Thu 19 Nov
+  const planned = (d) => data.workouts.find((w) => w.id === data.schedule[String(d.getDay())]) || null;
+  const before = Array.from({ length: 7 }, (_, i) => addDays(now, i - 7)).map((d) => {
+    const done = data.sessions.filter((s) => s.date === isoDay(d));
+    const p = planned(d);
+    if (done.length) {
+      const did = done.map((s) => `${s.name} (${musclesOf(data, s.exercises.map((e) => ({ ex: e.ex, sets: e.sets.length })))})`).join(" + ");
+      return `${day(d)}: did ${did}${p && !done.some((s) => s.workout === p.id) ? `; ${p.name} was planned` : ""}`;
+    }
+    return `${day(d)}: ${p ? `${p.name} planned, not done` : "rest"}`;
+  });
+  const after = Array.from({ length: 6 }, (_, i) => addDays(now, i + 1)).map((d) => `${day(d)}: ${planned(d)?.name || "rest"}`);
+  const skipped = skippedThisWeek(data, now).map((x) => `${x.w.name}${x.missed > 1 ? ` (${x.missed} times)` : ""}`);
+  const workouts = data.workouts.map((w) => {
+    const on = WEEK_ORDER.filter((d) => data.schedule[String(d)] === w.id).map((d) => WEEKDAYS[d].slice(0, 3));
+    const est = expectedMinutes(data, w);
+    const items = w.items.map((it) => `${exMap.get(it.ex)?.name || "?"} ${target(it, exMap.get(it.ex)).replace(" reps", "")}`);
+    return `${w.name} [id ${w.id}], ${on.length ? `on ${on.join(", ")}` : "not on a day"}, ${workoutSets(w)} sets, ${est.usual ? "usually" : "about"} ${est.minutes} min.`
+      + `\n   Hard sets: ${musclesOf(data, w.items) || "none"}\n   ${items.join(", ") || "no exercises"}`;
+  });
+  return [
+    `TODAY: ${shortDate(now)}, a rest day in my plan. I want to train anyway.`,
+    section("THE LAST 7 DAYS (hard sets per muscle for what I did):", before),
+    `SKIPPED THIS WEEK (planned for a day before today, not done on any day since Monday): ${skipped.join(", ") || "nothing"}.`,
+    section("COMING UP:", after),
+    section("MY WORKOUTS (any of them can be done today):", workouts),
+    section("HARD SETS PER MUSCLE THIS WEEK (Monday to Sunday), PLANNED (done so far); the target is 10–20:", [musclesLine(data, now, true)]),
+    section("BACKGROUND:", background(data, now)),
+  ].filter(Boolean).join("\n\n");
+}
+
+export function todayMessage(report, note = "") {
+  const q = String(note).trim();
+  return `Today is a rest day in my plan, but I want to go to the gym anyway. What should I do today?${q ? `\n\nWhat you should know: ${q}` : ""}\n\n${report}`;
+}
+
+/** For the Claude app: it ends with its pick as JSON to paste back */
+export function forClaudeAppToday(message) {
+  return `${TODAY_INSTRUCTIONS}
+
+Then end your answer with your pick in one \`\`\`json code block, which I'll paste back into the app, in exactly
+this shape:
+{"workout": "<workout id, or null to rest>", "why": "...", "tip": "", "plan": ""}
+
+---
+
+${message}`;
+}
+
+const isText = (v) => typeof v === "string";
+
+/** Ask Claude what to do today -> {input, content} */
+export async function askClaudeToday(apiKey, messages, opts = {}) {
+  const r = await streamClaude(apiKey, { max_tokens: 8000, system: TODAY_INSTRUCTIONS, messages,
+    output_config: { effort: EFFORT, format: { type: "json_schema", schema: TODAY_SCHEMA } } }, opts);
+  if (r.stop === "max_tokens") throw new Error("Claude's answer got cut off. Try again.");
+  if (r.stop === "refusal") throw new Error("Claude didn't answer this time. Try again.");
+  let input = null;
+  try { input = JSON.parse(r.text); } catch { input = jsonFromText(r.text, "why", isText); }
+  if (!isText(input?.why)) throw new Error("Claude didn't answer. Try again.");
+  return { input, content: r.content };
+}
+
+/** A pasted answer from the Claude app */
+export const todayFromText = (text) => jsonFromText(text, "why", isText);
+
+/** Claude's pick, checked against the app -> {workout (one of yours, or null: rest), unknown (a workout that isn't
+ *  in the app), why, tip, plan} */
+export function todayFrom(data, input) {
+  const raw = input?.workout === null || input?.workout === undefined ? "" : String(input.workout).trim();
+  const rest = !raw || /^(null|none|rest)$/i.test(raw);
+  const w = rest ? null : data.workouts.find((x) => x.id === raw) || data.workouts.find((x) => x.name.toLowerCase() === raw.toLowerCase())
+    || data.workouts.find((x) => `id ${x.id}` === raw) || null;
+  const text = (k) => String(input?.[k] || "").trim();
+  return { workout: w, unknown: !rest && !w, why: text("why"), tip: text("tip"), plan: text("plan") };
 }

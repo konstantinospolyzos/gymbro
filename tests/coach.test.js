@@ -347,3 +347,81 @@ test("the alternatives' shape follows the API's rules for structured outputs", (
   };
   walk(ALT_SCHEMA, "alternatives");
 });
+
+// 1.26: a rest day, but you want to train: Claude picks what fits today
+import { todayReport, todayMessage, forClaudeAppToday, askClaudeToday, todayFromText, todayFrom, skippedThisWeek,
+  TODAY_SCHEMA, TODAY_INSTRUCTIONS } from "../js/coach.js";
+
+const THU = new Date("2026-11-19T00:00:00");                    // a Thursday, a rest day below
+function restWeek() {
+  // Mon Back, Tue Chest, Wed Legs, (Thu rest), Fri Arms; Monday done, Tuesday's Chest done on Wednesday, Legs skipped
+  let d = applyOp(emptyData(), sampleOp(emptyData()));
+  d = applyOp(d, { type: "setDay", day: 4, workout: null });
+  const did = (id, date, wid, name) => applyOp(d, session(id, date, [{ ex: "ex-bench-press", kind: "weight", sets: sets(80, 8, 8, 7) }],
+    { workout: wid, name }));
+  d = did("t1", "2026-11-16", "rec-back", "Back");
+  d = did("t2", "2026-11-18", "rec-chest", "Chest");
+  d = did("t0", "2026-11-14", null, "Workout");                  // last Saturday, outside the plan
+  return d;
+}
+
+test("today: the workouts skipped this week (one done on another day isn't)", () => {
+  const d = restWeek();
+  assert.deepEqual(skippedThisWeek(d, THU).map((x) => [x.w.id, x.missed]), [["rec-legs", 1]]);
+  assert.deepEqual(skippedThisWeek(d, new Date("2026-11-16T00:00:00")), []);     // Monday: nothing before today
+  // the whole week skipped by Saturday: each planned workout once, Arms too
+  assert.deepEqual(skippedThisWeek(applyOp(emptyData(), sampleOp(emptyData())), new Date("2026-11-21T00:00:00")).map((x) => x.w.id),
+    ["rec-back", "rec-chest", "rec-legs", "rec-shoulders", "rec-arms"]);
+});
+
+test("today: what Claude is told (the days around today, what's skipped, every workout with its muscles)", () => {
+  const r = plain(todayReport(restWeek(), THU));
+  assert.match(r, /^TODAY: Thu 19 Nov, a rest day in my plan\. I want to train anyway\./);
+  assert.match(r, /Sat 14 Nov: did Workout \(Chest 3, Triceps 1\.5, Shoulders 1\.5\)\n/);
+  assert.match(r, /Mon 16 Nov: did Back \(Chest 3, Triceps 1\.5, Shoulders 1\.5\)\nTue 17 Nov: Chest planned, not done\n/);
+  assert.match(r, /Wed 18 Nov: did Chest \(Chest 3, Triceps 1\.5, Shoulders 1\.5\); Legs was planned\n/);
+  assert.match(r, /SKIPPED THIS WEEK \(planned for a day before today, not done on any day since Monday\): Legs\./);
+  // the next six days, into next week
+  assert.match(r, /COMING UP:\nFri 20 Nov: Arms\nSat 21 Nov: rest\nSun 22 Nov: rest\nMon 23 Nov: Back\nTue 24 Nov: Chest\nWed 25 Nov: Legs\n/);
+  assert.match(r, /Shoulders \[id rec-shoulders\], not on a day, 13 sets, about \d+ min\.\n   Hard sets: Shoulders 13, /);
+  assert.match(r, /Legs \[id rec-legs\], on Wed, 15 sets, about \d+ min\.\n   Hard sets: Quads 6, Hamstrings 6, Glutes 3, Calves 3\n   Squat 3 × 6–10, /);
+  assert.match(r, /PLANNED \(done so far\); the target is 10–20:\nChest 11 \(done 6\)/);
+  const m = todayMessage("R", "  only 45 minutes ");
+  assert.equal(m, "Today is a rest day in my plan, but I want to go to the gym anyway. What should I do today?\n\nWhat you should know: only 45 minutes\n\nR");
+  assert.ok(!todayMessage("R").includes("What you should know"));
+  assert.ok(forClaudeAppToday("M").startsWith(TODAY_INSTRUCTIONS) && forClaudeAppToday("M").includes('{"workout": "<workout id, or null to rest>"') && forClaudeAppToday("M").endsWith("M"));
+});
+
+test("today: Claude's pick, checked against the app", () => {
+  const d = restWeek();
+  const pick = todayFrom(d, { workout: "rec-legs", why: " You skipped **Legs** on Wednesday. ", tip: "", plan: "Keep Friday's Arms." });
+  assert.equal(pick.workout.id, "rec-legs");
+  assert.deepEqual([pick.unknown, pick.why, pick.tip, pick.plan], [false, "You skipped **Legs** on Wednesday.", "", "Keep Friday's Arms."]);
+  assert.equal(todayFrom(d, { workout: "Shoulders", why: "x" }).workout.id, "rec-shoulders");      // by its name
+  assert.equal(todayFrom(d, { workout: "id rec-arms", why: "x" }).workout.id, "rec-arms");         // as the report writes it
+  for (const rest of [null, "", "null", "rest"]) {
+    const r = todayFrom(d, { workout: rest, why: "Rest." });
+    assert.deepEqual([r.workout, r.unknown], [null, false], String(rest));
+  }
+  assert.equal(todayFrom(d, { workout: "rec-made-up", why: "x" }).unknown, true);
+});
+
+test("today: asking Claude (structured answer) and a pasted answer from the Claude app", async () => {
+  const ans = { workout: "rec-legs", why: "Legs were skipped and nothing hits them before Wednesday.", tip: "", plan: "" };
+  let sent = null;
+  const r = await askClaudeToday("k", [{ role: "user", content: "x" }], { fetchFn: async (u, o) => { sent = JSON.parse(o.body); return sse(JSON.stringify(ans)); } });
+  assert.deepEqual(r.input, ans);
+  assert.deepEqual(sent.output_config, { effort: "medium", format: { type: "json_schema", schema: TODAY_SCHEMA } });
+  assert.equal(sent.system, TODAY_INSTRUCTIONS);
+  await assert.rejects(askClaudeToday("k", [], { fetchFn: async () => sse("No idea.") }), /didn't answer/);
+  const pasted = todayFromText("Do legs today.\n\n```json\n" + JSON.stringify({ ...ans, workout: null }) + "\n```");
+  assert.deepEqual(pasted, { ...ans, workout: null });
+  assert.equal(todayFromText("no json here"), null);
+  assert.equal(jsonFromText('{"alternatives": "x"}', "alternatives"), null);       // the lists still need a list
+});
+
+test("today's answer shape follows the API's rules for structured outputs", () => {
+  assert.equal(TODAY_SCHEMA.additionalProperties, false);
+  assert.deepEqual([...TODAY_SCHEMA.required].sort(), Object.keys(TODAY_SCHEMA.properties).sort());
+  for (const v of Object.values(TODAY_SCHEMA.properties)) for (const bad of ["minLength", "maxLength", "enum"]) assert.equal(v[bad], undefined);
+});
